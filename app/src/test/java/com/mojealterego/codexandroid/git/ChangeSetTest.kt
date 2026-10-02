@@ -1,7 +1,7 @@
 package com.mojealterego.codexandroid.git
 
 import org.junit.Assert.assertEquals
-import org.junit.Assert.assertFailsWith
+import org.junit.Assert.fail
 import org.junit.Test
 
 class ChangeSetTest {
@@ -43,7 +43,6 @@ class ChangeSetTest {
 
         assertIllegalArgument { draft.validated() }
     }
-
 
     private fun assertIllegalArgument(block: () -> Unit) {
         try {
