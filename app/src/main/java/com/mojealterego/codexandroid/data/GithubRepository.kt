@@ -20,4 +20,14 @@ class GithubRepository(private val api: GithubApi) {
 
     suspend fun file(token: String, repo: GithubRepo, path: String): GithubFileContent =
         api.file(repositoryContentsPath(repo.fullName, path), "Bearer " + token, ref = repo.defaultBranch)
+
+    suspend fun updateFile(token: String, repo: GithubRepo, file: GithubFileContent, text: String, message: String): UpdateFileResponse {
+        require(message.isNotBlank()) { "Commit message is required" }
+        val encoded = java.util.Base64.getEncoder().encodeToString(text.toByteArray(Charsets.UTF_8))
+        return api.updateFile(
+            repositoryContentsPath(repo.fullName, file.path),
+            "Bearer " + token,
+            body = UpdateFileRequest(message.trim(), encoded, file.sha, repo.defaultBranch)
+        )
+    }
 }
