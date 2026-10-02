@@ -14,20 +14,23 @@ class GithubRepository(private val api: GithubApi) {
         return all.distinctBy { it.id }
     }
 
-    suspend fun contents(token: String, repo: GithubRepo, path: String = ""): List<RepoContent> =
-        api.contents(repositoryContentsPath(repo.fullName, path), "Bearer " + token, ref = repo.defaultBranch)
+    suspend fun branches(token: String, repo: GithubRepo): List<GithubBranch> =
+        api.branches(repositoryBranchesPath(repo.fullName), "Bearer " + token)
+
+    suspend fun contents(token: String, repo: GithubRepo, branch: String, path: String = ""): List<RepoContent> =
+        api.contents(repositoryContentsPath(repo.fullName, path), "Bearer " + token, ref = branch)
             .sortedWith(compareBy<RepoContent> { it.type != "dir" }.thenBy { it.name.lowercase() })
 
-    suspend fun file(token: String, repo: GithubRepo, path: String): GithubFileContent =
-        api.file(repositoryContentsPath(repo.fullName, path), "Bearer " + token, ref = repo.defaultBranch)
+    suspend fun file(token: String, repo: GithubRepo, branch: String, path: String): GithubFileContent =
+        api.file(repositoryContentsPath(repo.fullName, path), "Bearer " + token, ref = branch)
 
-    suspend fun updateFile(token: String, repo: GithubRepo, file: GithubFileContent, text: String, message: String): UpdateFileResponse {
+    suspend fun updateFile(token: String, repo: GithubRepo, branch: String, file: GithubFileContent, text: String, message: String): UpdateFileResponse {
         require(message.isNotBlank()) { "Commit message is required" }
         val encoded = java.util.Base64.getEncoder().encodeToString(text.toByteArray(Charsets.UTF_8))
         return api.updateFile(
             repositoryContentsPath(repo.fullName, file.path),
             "Bearer " + token,
-            body = UpdateFileRequest(message.trim(), encoded, file.sha, repo.defaultBranch)
+            body = UpdateFileRequest(message.trim(), encoded, file.sha, branch)
         )
     }
 }
