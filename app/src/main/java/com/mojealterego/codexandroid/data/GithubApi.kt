@@ -1,0 +1,18 @@
+package com.mojealterego.codexandroid.data
+
+import retrofit2.http.GET
+import retrofit2.http.Header
+import retrofit2.http.Query
+
+interface GithubApi {
+    @GET("user/repos")
+    suspend fun repositories(
+        @Header("Authorization") authorization: String,
+        @Header("Accept") accept: String = "application/vnd.github+json",
+        @Query("visibility") visibility: String = "all",
+        @Query("affiliation") affiliation: String = "owner,collaborator,organization_member",
+        @Query("sort") sort: String = "updated",
+        @Query("per_page") perPage: Int = 100,
+        @Query("page") page: Int
+    ): List<GithubRepo>
+}
