@@ -1,10 +1,17 @@
 name: Android CI
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
+      - "codex/**"
   pull_request:
     branches: [ main ]
   workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: android-ci-${{ github.ref }}
+  cancel-in-progress: true
 jobs:
   test-and-build:
     runs-on: ubuntu-latest
@@ -25,3 +32,4 @@ jobs:
         with:
           name: Codex-Android-debug
           path: app/build/outputs/apk/debug/app-debug.apk
+          retention-days: 14
