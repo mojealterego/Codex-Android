@@ -17,4 +17,7 @@ class GithubRepository(private val api: GithubApi) {
     suspend fun contents(token: String, repo: GithubRepo, path: String = ""): List<RepoContent> =
         api.contents(repositoryContentsPath(repo.fullName, path), "Bearer " + token, ref = repo.defaultBranch)
             .sortedWith(compareBy<RepoContent> { it.type != "dir" }.thenBy { it.name.lowercase() })
+
+    suspend fun file(token: String, repo: GithubRepo, path: String): GithubFileContent =
+        api.file(repositoryContentsPath(repo.fullName, path), "Bearer " + token, ref = repo.defaultBranch)
 }
