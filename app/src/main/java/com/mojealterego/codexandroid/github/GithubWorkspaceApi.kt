@@ -12,7 +12,7 @@ import retrofit2.http.Url
 
 interface GithubWorkspaceApi {
     @GET
-    suspend fun commits(
+    override suspend fun commits(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT,
@@ -21,7 +21,7 @@ interface GithubWorkspaceApi {
     ): List<GithubCommitItem>
 
     @POST
-    suspend fun createPullRequest(
+    override suspend fun createPullRequest(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT,
@@ -29,7 +29,7 @@ interface GithubWorkspaceApi {
     ): GithubPullRequestResponse
 
     @GET
-    suspend fun workflowRuns(
+    override suspend fun workflowRuns(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT,
@@ -38,7 +38,7 @@ interface GithubWorkspaceApi {
     ): WorkflowRunsResponse
 
     @GET
-    suspend fun workflowJobs(
+    override suspend fun workflowJobs(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT
@@ -152,7 +152,7 @@ data class GithubArtifact(
 class GithubWorkspaceService(
     private val api: GithubWorkspaceApi,
     token: String
-) {
+) : WorkspaceGateway {
     private val authorization = "Bearer " + token.trim()
 
     init {
@@ -214,7 +214,7 @@ class GithubWorkspaceService(
             authorization = authorization
         ).jobs
 
-    suspend fun jobLog(
+    override suspend fun jobLog(
         repoFullName: String,
         jobId: Long
     ): String =
@@ -223,7 +223,7 @@ class GithubWorkspaceService(
             authorization = authorization
         ).use { it.string() }
 
-    suspend fun workflowArtifacts(
+    override suspend fun workflowArtifacts(
         repoFullName: String,
         runId: Long
     ): List<GithubArtifact> =
