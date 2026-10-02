@@ -15,7 +15,9 @@ data class MainUiState(
     val error: String? = null,
     val selectedRepo: GithubRepo? = null,
     val path: String = "",
-    val contents: List<RepoContent> = emptyList(),\n    val openedFile: GithubFileContent? = null,\n    val fileText: String = ""
+    val contents: List<RepoContent> = emptyList(),
+    val openedFile: GithubFileContent? = null,
+    val fileText: String = ""
 ) {
     val visibleRepositories get() = filterRepositories(repositories, query)
 }
@@ -37,7 +39,8 @@ class MainViewModel(private val repository: GithubRepository) : ViewModel() {
 
     fun openRepo(repo: GithubRepo) = openPath(repo, "")
 
-    fun openItem(item: RepoContent) {\n        if (item.type == "file") { openFile(item); return }
+    fun openItem(item: RepoContent) {
+        if (item.type == "file") { openFile(item); return }
         val repo = mutableState.value.selectedRepo ?: return
         if (item.type == "dir") openPath(repo, item.path)
     }
@@ -45,6 +48,10 @@ class MainViewModel(private val repository: GithubRepository) : ViewModel() {
     fun back() {
         val s = mutableState.value
         if (s.selectedRepo == null) return
+        if (s.openedFile != null) {
+            mutableState.value = s.copy(openedFile = null, fileText = "", error = null)
+            return
+        }
         if (s.path.isBlank()) {
             mutableState.value = s.copy(selectedRepo = null, contents = emptyList(), error = null)
         } else {
