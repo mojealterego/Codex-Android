@@ -18,6 +18,14 @@ interface GithubApi {
     ): List<GithubRepo>
 
     @GET
+    suspend fun branches(
+        @Url path: String,
+        @Header("Authorization") authorization: String,
+        @Header("Accept") accept: String = "application/vnd.github+json",
+        @Query("per_page") perPage: Int = 100
+    ): List<GithubBranch>
+
+    @GET
     suspend fun contents(
         @Url path: String,
         @Header("Authorization") authorization: String,

@@ -2,8 +2,8 @@ package com.mojealterego.codexandroid
 
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -13,6 +13,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mojealterego.codexandroid.data.*
@@ -40,6 +41,7 @@ class MainActivity : ComponentActivity() {
 private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
     val state by vm.state.collectAsState()
     var token by remember { mutableStateOf(tokenStore.githubToken().orEmpty()) }
+    var branchMenu by remember { mutableStateOf(false) }
     BackHandler(enabled = state.selectedRepo != null) { vm.back() }
 
     Surface(Modifier.fillMaxSize()) {
@@ -47,6 +49,22 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
             Text("CODEX ANDROID", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
             state.selectedRepo?.let { repo ->
                 Text(repo.fullName, color = MaterialTheme.colorScheme.primary)
+                Box {
+                    OutlinedButton(onClick = { branchMenu = true }, enabled = !state.loading) {
+                        Text("Branch: " + state.selectedBranch + " ▾")
+                    }
+                    DropdownMenu(expanded = branchMenu, onDismissRequest = { branchMenu = false }) {
+                        state.branches.forEach { branch ->
+                            DropdownMenuItem(
+                                text = { Text(branch.name) },
+                                onClick = {
+                                    branchMenu = false
+                                    vm.selectBranch(branch.name)
+                                }
+                            )
+                        }
+                    }
+                }
                 Text("/" + state.path, style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = vm::back) { Text("← Wstecz") }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
@@ -70,13 +88,13 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                         }
                         OutlinedTextField(state.commitMessage, vm::updateCommitMessage, label = { Text("Commit message") }, modifier = Modifier.fillMaxWidth())
                         Button(onClick = vm::save, enabled = draft.isDirty && state.commitMessage.isNotBlank() && !state.loading, modifier = Modifier.fillMaxWidth()) {
-                            Text(if (state.loading) "Zapisywanie…" else "Commit & push")
+                            Text(if (state.loading) "Zapisywanie…" else "Commit & push → " + state.selectedBranch)
                         }
                     } else {
                         Surface(Modifier.fillMaxWidth().weight(1f), tonalElevation = 2.dp) {
                             Text(state.fileText, modifier = Modifier.padding(12.dp), fontFamily = FontFamily.Monospace)
                         }
-                        if (state.saved) Text("Zapisano w GitHub")
+                        if (state.saved) Text("Zapisano w GitHub: " + state.selectedBranch)
                         Button(onClick = vm::edit, modifier = Modifier.fillMaxWidth()) { Text("Edytuj plik") }
                     }
                 } else LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -90,7 +108,13 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                 }
             } ?: run {
                 Text("GitHub workspace", color = MaterialTheme.colorScheme.primary)
-                OutlinedTextField(token, { token = it }, label = { Text("GitHub token") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                OutlinedTextField(
+                    token, { token = it },
+                    label = { Text("GitHub token") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
                 Button(onClick = { tokenStore.saveGithubToken(token); vm.load(token) },
                     enabled = token.isNotBlank() && !state.loading, modifier = Modifier.fillMaxWidth()) {
                     Text(if (state.loading) "Łączenie…" else "Połącz z GitHub")
