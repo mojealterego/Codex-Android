@@ -30,7 +30,7 @@ class ChangeSetTest {
             )
         )
 
-        assertFailsWith<IllegalArgumentException> { draft.validated() }
+        assertIllegalArgument { draft.validated() }
     }
 
     @Test fun rejectsNonCodexBranch() {
@@ -41,6 +41,15 @@ class ChangeSetTest {
             files = listOf(FileDraft("a.kt", FileOperation.UPSERT, "one", "100644", "x"))
         )
 
-        assertFailsWith<IllegalArgumentException> { draft.validated() }
+        assertIllegalArgument { draft.validated() }
+    }
+
+
+    private fun assertIllegalArgument(block: () -> Unit) {
+        try {
+            block()
+            fail("Expected IllegalArgumentException")
+        } catch (_: IllegalArgumentException) {
+        }
     }
 }
