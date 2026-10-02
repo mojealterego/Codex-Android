@@ -3,6 +3,8 @@ package com.mojealterego.codexandroid
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.compose.BackHandler
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -36,29 +38,47 @@ class MainActivity : ComponentActivity() {
 private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
     val state by vm.state.collectAsState()
     var token by remember { mutableStateOf(tokenStore.githubToken().orEmpty()) }
+    BackHandler(enabled = state.selectedRepo != null) { vm.back() }
+
     Surface(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("CODEX ANDROID", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-            Text("GitHub workspace", color = MaterialTheme.colorScheme.primary)
-            OutlinedTextField(token, { token = it }, label = { Text("GitHub token") }, singleLine = true, modifier = Modifier.fillMaxWidth())
-            Button(onClick = { tokenStore.saveGithubToken(token); vm.load(token) },
-                enabled = token.isNotBlank() && !state.loading, modifier = Modifier.fillMaxWidth()) {
-                Text(if (state.loading) "Łączenie…" else "Połącz z GitHub")
-            }
-            if (state.repositories.isNotEmpty()) {
-                OutlinedTextField(state.query, vm::search, label = { Text("Szukaj repozytorium") }, modifier = Modifier.fillMaxWidth())
-                Text(state.visibleRepositories.size.toString() + " repozytoriów")
-            }
-            state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(state.visibleRepositories, key = { it.id }) { repo ->
-                    ElevatedCard(Modifier.fillMaxWidth()) {
-                        Column(Modifier.padding(16.dp)) {
-                            Text(repo.name, fontWeight = FontWeight.SemiBold)
-                            Text(repo.fullName, style = MaterialTheme.typography.bodySmall)
-                            val visibility = if (repo.private) "PRIVATE" else "PUBLIC"
-                            Text(visibility + " · " + (repo.language ?: "—") + " · " + repo.defaultBranch,
-                                style = MaterialTheme.typography.labelSmall)
+            state.selectedRepo?.let { repo ->
+                Text(repo.fullName, color = MaterialTheme.colorScheme.primary)
+                Text("/" + state.path, style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(onClick = vm::back) { Text("← Wstecz") }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                    items(state.contents, key = { it.path }) { item ->
+                        ListItem(
+                            headlineContent = { Text((if (item.type == "dir") "▸ " else "") + item.name) },
+                            supportingContent = { Text(if (item.type == "dir") "folder" else item.size.toString() + " B") },
+                            modifier = Modifier.clickable(enabled = item.type == "dir") { vm.openDirectory(item) }
+                        )
+                    }
+                }
+            } ?: run {
+                Text("GitHub workspace", color = MaterialTheme.colorScheme.primary)
+                OutlinedTextField(token, { token = it }, label = { Text("GitHub token") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Button(onClick = { tokenStore.saveGithubToken(token); vm.load(token) },
+                    enabled = token.isNotBlank() && !state.loading, modifier = Modifier.fillMaxWidth()) {
+                    Text(if (state.loading) "Łączenie…" else "Połącz z GitHub")
+                }
+                if (state.repositories.isNotEmpty()) {
+                    OutlinedTextField(state.query, vm::search, label = { Text("Szukaj repozytorium") }, modifier = Modifier.fillMaxWidth())
+                    Text(state.visibleRepositories.size.toString() + " repozytoriów")
+                }
+                state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    items(state.visibleRepositories, key = { it.id }) { repo ->
+                        ElevatedCard(Modifier.fillMaxWidth().clickable { vm.openRepo(repo) }) {
+                            Column(Modifier.padding(16.dp)) {
+                                Text(repo.name, fontWeight = FontWeight.SemiBold)
+                                Text(repo.fullName, style = MaterialTheme.typography.bodySmall)
+                                val visibility = if (repo.private) "PRIVATE" else "PUBLIC"
+                                Text(visibility + " · " + (repo.language ?: "—") + " · " + repo.defaultBranch,
+                                    style = MaterialTheme.typography.labelSmall)
+                            }
                         }
                     }
                 }
