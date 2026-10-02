@@ -11,7 +11,8 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontFamily\nimport androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mojealterego.codexandroid.data.*
@@ -48,7 +49,12 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                 Text("/" + state.path, style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = vm::back) { Text("← Wstecz") }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                if (state.openedFile != null) {
+                    Text(state.openedFile.name, fontWeight = FontWeight.SemiBold)
+                    Surface(Modifier.fillMaxWidth().weight(1f), tonalElevation = 2.dp) {
+                        Text(state.fileText, modifier = Modifier.padding(12.dp), fontFamily = FontFamily.Monospace)
+                    }
+                } else LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(state.contents, key = { it.path }) { item ->
                         ListItem(
                             headlineContent = { Text((if (item.type == "dir") "▸ " else "") + item.name) },
