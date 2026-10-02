@@ -49,8 +49,9 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                 Text("/" + state.path, style = MaterialTheme.typography.bodySmall)
                 OutlinedButton(onClick = vm::back) { Text("← Wstecz") }
                 state.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                if (state.openedFile != null) {
-                    Text(state.openedFile.name, fontWeight = FontWeight.SemiBold)
+                val openedFile = state.openedFile
+                if (openedFile != null) {
+                    Text(openedFile.name, fontWeight = FontWeight.SemiBold)
                     Surface(Modifier.fillMaxWidth().weight(1f), tonalElevation = 2.dp) {
                         Text(state.fileText, modifier = Modifier.padding(12.dp), fontFamily = FontFamily.Monospace)
                     }
