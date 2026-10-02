@@ -16,6 +16,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mojealterego.codexandroid.data.*
+import com.mojealterego.codexandroid.editor.EditDraft
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -52,8 +53,31 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                 val openedFile = state.openedFile
                 if (openedFile != null) {
                     Text(openedFile.name, fontWeight = FontWeight.SemiBold)
-                    Surface(Modifier.fillMaxWidth().weight(1f), tonalElevation = 2.dp) {
-                        Text(state.fileText, modifier = Modifier.padding(12.dp), fontFamily = FontFamily.Monospace)
+                    if (state.editing) {
+                        OutlinedTextField(
+                            value = state.draftText,
+                            onValueChange = vm::updateDraft,
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            textStyle = LocalTextStyle.current.copy(fontFamily = FontFamily.Monospace),
+                            label = { Text("Edycja") }
+                        )
+                        val draft = EditDraft(openedFile.path, openedFile.sha, state.fileText, state.draftText)
+                        if (draft.isDirty) {
+                            Text("DIFF", fontWeight = FontWeight.Bold)
+                            Surface(Modifier.fillMaxWidth().heightIn(max = 180.dp), tonalElevation = 2.dp) {
+                                Text(draft.diff(), modifier = Modifier.padding(10.dp), fontFamily = FontFamily.Monospace)
+                            }
+                        }
+                        OutlinedTextField(state.commitMessage, vm::updateCommitMessage, label = { Text("Commit message") }, modifier = Modifier.fillMaxWidth())
+                        Button(onClick = vm::save, enabled = draft.isDirty && state.commitMessage.isNotBlank() && !state.loading, modifier = Modifier.fillMaxWidth()) {
+                            Text(if (state.loading) "Zapisywanie…" else "Commit & push")
+                        }
+                    } else {
+                        Surface(Modifier.fillMaxWidth().weight(1f), tonalElevation = 2.dp) {
+                            Text(state.fileText, modifier = Modifier.padding(12.dp), fontFamily = FontFamily.Monospace)
+                        }
+                        if (state.saved) Text("Zapisano w GitHub")
+                        Button(onClick = vm::edit, modifier = Modifier.fillMaxWidth()) { Text("Edytuj plik") }
                     }
                 } else LazyColumn(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                     items(state.contents, key = { it.path }) { item ->
