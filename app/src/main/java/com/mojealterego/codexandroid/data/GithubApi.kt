@@ -32,4 +32,12 @@ interface GithubApi {
         @Header("Accept") accept: String = "application/vnd.github+json",
         @Query("ref") ref: String
     ): GithubFileContent
+
+    @retrofit2.http.PUT
+    suspend fun updateFile(
+        @Url path: String,
+        @Header("Authorization") authorization: String,
+        @Header("Accept") accept: String = "application/vnd.github+json",
+        @retrofit2.http.Body body: UpdateFileRequest
+    ): UpdateFileResponse
 }
