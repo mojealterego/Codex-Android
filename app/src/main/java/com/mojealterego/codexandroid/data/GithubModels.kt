@@ -49,3 +49,14 @@ data class GithubFileContent(
         return String(java.util.Base64.getDecoder().decode(clean), Charsets.UTF_8)
     }
 }
+
+
+data class UpdateFileRequest(
+    val message: String,
+    val content: String,
+    val sha: String,
+    val branch: String
+)
+
+data class UpdateFileResponse(val content: GithubUpdatedContent)
+data class GithubUpdatedContent(val sha: String)
