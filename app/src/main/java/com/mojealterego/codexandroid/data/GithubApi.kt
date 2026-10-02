@@ -24,4 +24,12 @@ interface GithubApi {
         @Header("Accept") accept: String = "application/vnd.github+json",
         @Query("ref") ref: String
     ): List<RepoContent>
+
+    @GET
+    suspend fun file(
+        @Url path: String,
+        @Header("Authorization") authorization: String,
+        @Header("Accept") accept: String = "application/vnd.github+json",
+        @Query("ref") ref: String
+    ): GithubFileContent
 }
