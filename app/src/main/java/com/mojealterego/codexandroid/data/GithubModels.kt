@@ -12,6 +12,14 @@ data class GithubRepo(
     val description: String?
 )
 
+data class RepoContent(
+    val name: String,
+    val path: String,
+    val type: String,
+    val size: Long = 0,
+    @SerializedName("download_url") val downloadUrl: String? = null
+)
+
 fun filterRepositories(repositories: List<GithubRepo>, query: String): List<GithubRepo> {
     val q = query.trim()
     if (q.isBlank()) return repositories
@@ -20,4 +28,9 @@ fun filterRepositories(repositories: List<GithubRepo>, query: String): List<Gith
             it.fullName.contains(q, ignoreCase = true) ||
             (it.description?.contains(q, ignoreCase = true) == true)
     }
+}
+
+fun repositoryContentsPath(fullName: String, path: String): String {
+    val clean = path.trim('/')
+    return "repos/" + fullName + "/contents/" + clean
 }
