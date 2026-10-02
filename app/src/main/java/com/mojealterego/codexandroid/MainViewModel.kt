@@ -15,7 +15,7 @@ data class MainUiState(
     val error: String? = null,
     val selectedRepo: GithubRepo? = null,
     val path: String = "",
-    val contents: List<RepoContent> = emptyList()
+    val contents: List<RepoContent> = emptyList(),\n    val openedFile: GithubFileContent? = null,\n    val fileText: String = ""
 ) {
     val visibleRepositories get() = filterRepositories(repositories, query)
 }
@@ -37,7 +37,7 @@ class MainViewModel(private val repository: GithubRepository) : ViewModel() {
 
     fun openRepo(repo: GithubRepo) = openPath(repo, "")
 
-    fun openDirectory(item: RepoContent) {
+    fun openItem(item: RepoContent) {\n        if (item.type == "file") { openFile(item); return }
         val repo = mutableState.value.selectedRepo ?: return
         if (item.type == "dir") openPath(repo, item.path)
     }
@@ -51,6 +51,14 @@ class MainViewModel(private val repository: GithubRepository) : ViewModel() {
             val parent = s.path.substringBeforeLast('/', "")
             openPath(s.selectedRepo, parent)
         }
+    }
+
+    private fun openFile(item: RepoContent) = viewModelScope.launch {
+        val repo = mutableState.value.selectedRepo ?: return@launch
+        mutableState.value = mutableState.value.copy(loading = true, error = null)
+        runCatching { repository.file(token, repo, item.path) }
+            .onSuccess { mutableState.value = mutableState.value.copy(openedFile = it, fileText = it.decodedText(), loading = false) }
+            .onFailure { mutableState.value = mutableState.value.copy(loading = false, error = it.message ?: "Cannot load file") }
     }
 
     private fun openPath(repo: GithubRepo, path: String) = viewModelScope.launch {
