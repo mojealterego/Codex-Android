@@ -84,8 +84,10 @@ private class FakeGithubGitDataApi : GithubGitDataApi {
         path: String,
         authorization: String,
         accept: String
-    ): GitCommitResponse =
-        GitCommitResponse("head-1", GitTreeResponse("tree-1"))
+    ): GitCommitResponse {
+        lastCommitPath = path
+        return GitCommitResponse("head-1", GitTreeResponse("tree-1"))
+    }
 
     override suspend fun createBlob(
         path: String,
