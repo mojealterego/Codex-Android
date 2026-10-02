@@ -34,3 +34,18 @@ fun repositoryContentsPath(fullName: String, path: String): String {
     val clean = path.trim('/')
     return "repos/" + fullName + "/contents/" + clean
 }
+
+
+data class GithubFileContent(
+    val name: String,
+    val path: String,
+    val sha: String,
+    val encoding: String,
+    val content: String
+) {
+    fun decodedText(): String {
+        require(encoding == "base64") { "Unsupported GitHub content encoding: " + encoding }
+        val clean = content.filterNot { it.isWhitespace() }
+        return String(java.util.Base64.getDecoder().decode(clean), Charsets.UTF_8)
+    }
+}
