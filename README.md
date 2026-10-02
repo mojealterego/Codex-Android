@@ -14,3 +14,6 @@ Never commit GitHub/OpenAI tokens.
 
 ## Codex
 This project is an independent Android client. It does not impersonate the official OpenAI Codex app. Codex Cloud will be integrated only through supported OpenAI interfaces.
+
+## Build
+GitHub Actions builds and tests every change on `main` and publishes a debug APK artifact.
