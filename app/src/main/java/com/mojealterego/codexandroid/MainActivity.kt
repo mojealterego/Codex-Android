@@ -11,7 +11,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontFamily\nimport androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mojealterego.codexandroid.data.*
@@ -53,7 +53,7 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                         ListItem(
                             headlineContent = { Text((if (item.type == "dir") "▸ " else "") + item.name) },
                             supportingContent = { Text(if (item.type == "dir") "folder" else item.size.toString() + " B") },
-                            modifier = Modifier.clickable(enabled = item.type == "dir") { vm.openDirectory(item) }
+                            modifier = Modifier.clickable { vm.openItem(item) }
                         )
                     }
                 }
