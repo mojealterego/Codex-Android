@@ -1,5 +1,6 @@
 package com.mojealterego.codexandroid.agent
 
+import com.google.gson.JsonElement
 import com.google.gson.annotations.SerializedName
 import com.mojealterego.codexandroid.git.ChangeSetDraft
 import com.mojealterego.codexandroid.git.FileDraft
@@ -21,6 +22,14 @@ data class AgentSessionResponse(
     @SerializedName("base_branch") val baseBranch: String,
     @SerializedName("base_sha") val baseSha: String,
     @SerializedName("events_path") val eventsPath: String
+)
+
+data class AgentRecoveryResponse(
+    @SerializedName("session_id") val sessionId: String,
+    val status: String,
+    val error: String?,
+    @SerializedName("required_actions") val requiredActions: List<JsonElement>,
+    val items: List<JsonElement>
 )
 
 data class AgentFileChangeResponse(
