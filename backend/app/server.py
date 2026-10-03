@@ -14,6 +14,7 @@ from .main import create_app
 from .openai_agent_control import OpenAIAgentControl
 from .openai_agents_runtime import OpenAIAgentsRuntime
 from .openai_event_source import OpenAIAgentEventSource
+from .sqlite_session_store import SqliteSessionStore
 
 
 DEFAULT_AGENT_INSTRUCTIONS = """
@@ -32,6 +33,7 @@ def build_runtime_app(
     http_client: Any,
     github_token: str | None,
     instructions: str = DEFAULT_AGENT_INSTRUCTIONS,
+    session_store: Any | None = None,
 ) -> FastAPI:
     workspace_preparer = GithubArchiveWorkspacePreparer(
         http_client=http_client,
@@ -45,7 +47,11 @@ def build_runtime_app(
     event_source = OpenAIAgentEventSource(openai_client)
     service = AgentService(
         runtime=runtime,
-        idempotency_store=InMemoryIdempotencyStore(),
+        idempotency_store=(
+            session_store
+            if session_store is not None
+            else InMemoryIdempotencyStore()
+        ),
         workspace_preparer=workspace_preparer,
         change_collector=OpenAIChangeSetCollector(openai_client),
         agent_control=OpenAIAgentControl(openai_client),
@@ -69,6 +75,13 @@ def create_runtime_app() -> FastAPI:
     if not instructions:
         raise RuntimeError("CODEX_AGENT_INSTRUCTIONS must not be empty")
 
+    state_database = (
+        os.environ.get("CODEX_STATE_DB")
+        or "./codex-android-state.sqlite3"
+    ).strip()
+    if not state_database:
+        raise RuntimeError("CODEX_STATE_DB must not be empty")
+
     openai_client = OpenAI(api_key=api_key)
     http_client = httpx.Client(
         timeout=httpx.Timeout(60.0, connect=10.0),
@@ -79,6 +92,7 @@ def create_runtime_app() -> FastAPI:
         http_client=http_client,
         github_token=github_token,
         instructions=instructions,
+        session_store=SqliteSessionStore(state_database),
     )
 
     @app.on_event("shutdown")
