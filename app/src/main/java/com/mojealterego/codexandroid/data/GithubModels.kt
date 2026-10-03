@@ -20,6 +20,9 @@ data class RepoContent(
     @SerializedName("download_url") val downloadUrl: String? = null
 )
 
+data class GithubBranch(val name: String, val commit: GithubBranchCommit)
+data class GithubBranchCommit(val sha: String)
+
 fun filterRepositories(repositories: List<GithubRepo>, query: String): List<GithubRepo> {
     val q = query.trim()
     if (q.isBlank()) return repositories
@@ -35,6 +38,17 @@ fun repositoryContentsPath(fullName: String, path: String): String {
     return "repos/" + fullName + "/contents/" + clean
 }
 
+fun repositoryBranchesPath(fullName: String): String = "repos/" + fullName + "/branches"
+
+fun codexBranchName(label: String): String {
+    val slug = label.trim().lowercase()
+        .replace(Regex("[^a-z0-9._-]+"), "-")
+        .trim('-')
+    return "codex/" + slug
+}
+
+fun isValidCodexBranchName(name: String): Boolean =
+    name.startsWith("codex/") && name.removePrefix("codex/").isNotBlank()
 
 data class GithubFileContent(
     val name: String,
@@ -50,13 +64,11 @@ data class GithubFileContent(
     }
 }
 
-
 data class UpdateFileRequest(
     val message: String,
     val content: String,
     val sha: String,
     val branch: String
 )
-
 data class UpdateFileResponse(val content: GithubUpdatedContent)
 data class GithubUpdatedContent(val sha: String)
