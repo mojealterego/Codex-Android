@@ -27,6 +27,7 @@ import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.mojealterego.codexandroid.agent.EncryptedAgentSessionPersistence
 import com.mojealterego.codexandroid.data.*
 import com.mojealterego.codexandroid.editor.EditDraft
 import com.mojealterego.codexandroid.git.GithubGitDataApi
@@ -51,6 +52,7 @@ class MainActivity : ComponentActivity() {
         val gitDataApi = retrofit.create(GithubGitDataApi::class.java)
         val repository = GithubRepository(api)
         val tokenStore = TokenStore(this)
+        val agentSessionPersistence = EncryptedAgentSessionPersistence(this)
         val agentHttpClient = OkHttpClient.Builder().build()
 
         setContent {
@@ -63,7 +65,8 @@ class MainActivity : ComponentActivity() {
                             artifactApi = artifactApi,
                             gitDataApi = gitDataApi,
                             artifactCacheDirectory = File(cacheDir, "artifacts"),
-                            agentHttpClient = agentHttpClient
+                            agentHttpClient = agentHttpClient,
+                            agentSessionPersistence = agentSessionPersistence
                         )
                     }
                 )
