@@ -9,6 +9,7 @@ import com.mojealterego.codexandroid.github.*
 import java.io.File
 import java.util.UUID
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -16,6 +17,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeout
 import okhttp3.OkHttpClient
 
 data class MainUiState(
@@ -61,7 +63,9 @@ data class MainUiState(
     val agentPublishResult: PublishResult? = null,
     val agentSteerMessage: String = "",
     val agentControlBusy: Boolean = false,
-    val agentCancelRequested: Boolean = false
+    val agentCancelRequested: Boolean = false,
+    val agentRecovery: AgentRecoveryResponse? = null,
+    val agentStreamDisconnected: Boolean = false
 ) {
     val visibleRepositories get() = filterRepositories(repositories, query)
     val selectedBranchHeadSha: String
@@ -138,7 +142,9 @@ class MainViewModel(
             agentStreaming = false,
             agentChanges = null,
             agentChangeSetDraft = null,
-            agentPublishResult = null
+            agentPublishResult = null,
+            agentRecovery = null,
+            agentStreamDisconnected = false
         )
         pendingAgentIdempotencyKey = null
 
@@ -192,7 +198,9 @@ class MainViewModel(
             agentStreaming = false,
             agentChanges = null,
             agentChangeSetDraft = null,
-            agentPublishResult = null
+            agentPublishResult = null,
+            agentRecovery = null,
+            agentStreamDisconnected = false
         )
         openPath(repo, branch, "")
     }
@@ -370,6 +378,67 @@ class MainViewModel(
         }
     }
 
+    fun recoverAgentSession() {
+        val s = mutableState.value
+        val session = s.agentSession ?: return
+        if (s.agentControlBusy) return
+
+        val client = AgentBffClient(
+            s.agentBackendUrl,
+            agentHttpClient,
+            accessToken = s.agentBackendToken
+        )
+        val connected = CompletableDeferred<Unit>()
+
+        mutableState.value = s.copy(
+            agentControlBusy = true,
+            error = null
+        )
+
+        streamAgentEvents(
+            client = client,
+            sessionId = session.sessionId,
+            onConnected = {
+                connected.complete(Unit)
+            }
+        )
+
+        viewModelScope.launch {
+            runCatching {
+                withTimeout(15_000L) {
+                    connected.await()
+                }
+                client.recover(session.sessionId)
+            }.onSuccess { recovery ->
+                val current = mutableState.value
+                if (current.agentSession?.sessionId != session.sessionId) {
+                    return@onSuccess
+                }
+
+                mutableState.value = current.copy(
+                    agentRecovery = recovery,
+                    agentControlBusy = false,
+                    agentStreamDisconnected = false,
+                    agentStreaming = recovery.status == "in_progress",
+                    error = if (recovery.status == "failed") {
+                        recovery.error ?: "Sesja agenta zakończyła się błędem."
+                    } else {
+                        null
+                    }
+                )
+            }.onFailure {
+                val current = mutableState.value
+                if (current.agentSession?.sessionId == session.sessionId) {
+                    mutableState.value = current.copy(
+                        agentControlBusy = false,
+                        agentStreamDisconnected = true,
+                        error = it.message ?: "Nie można odtworzyć sesji agenta."
+                    )
+                }
+            }
+        }
+    }
+
     fun updateAgentCommitMessage(value: String) {
         val s = mutableState.value.copy(agentCommitMessage = value)
         val rebuilt = s.agentChanges?.let { changes ->
@@ -452,7 +521,9 @@ class MainViewModel(
             agentEvents = emptyList(),
             agentChanges = null,
             agentChangeSetDraft = null,
-            agentPublishResult = null
+            agentPublishResult = null,
+            agentRecovery = null,
+            agentStreamDisconnected = false
         )
 
         viewModelScope.launch {
@@ -596,7 +667,9 @@ class MainViewModel(
             agentPublishResult = null,
             agentSteerMessage = "",
             agentControlBusy = false,
-            agentCancelRequested = false
+            agentCancelRequested = false,
+            agentRecovery = null,
+            agentStreamDisconnected = false
         )
     }
 
@@ -859,12 +932,24 @@ class MainViewModel(
 
     private fun streamAgentEvents(
         client: AgentBffClient,
-        sessionId: String
+        sessionId: String,
+        onConnected: () -> Unit = {}
     ) {
         cancelAgentStream()
         agentStreamJob = viewModelScope.launch {
             try {
-                client.streamEvents(sessionId) { event ->
+                client.streamEvents(
+                    sessionId = sessionId,
+                    onConnected = {
+                        val current = mutableState.value
+                        if (current.agentSession?.sessionId == sessionId) {
+                            mutableState.value = current.copy(
+                                agentStreamDisconnected = false
+                            )
+                        }
+                        onConnected()
+                    }
+                ) { event ->
                     val current = mutableState.value
                     if (current.agentSession?.sessionId != sessionId) {
                         return@streamEvents
@@ -886,6 +971,7 @@ class MainViewModel(
                 if (current.agentSession?.sessionId == sessionId) {
                     mutableState.value = current.copy(
                         agentStreaming = false,
+                        agentStreamDisconnected = true,
                         error = error.message ?: "Strumień agenta został przerwany."
                     )
                 }
