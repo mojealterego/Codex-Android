@@ -1,6 +1,12 @@
 package com.mojealterego.codexandroid
 
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
+import android.widget.Toast
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
@@ -11,14 +17,17 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
+import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mojealterego.codexandroid.data.*
 import com.mojealterego.codexandroid.editor.EditDraft
 import com.mojealterego.codexandroid.github.*
+import java.io.File
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -33,6 +42,7 @@ class MainActivity : ComponentActivity() {
 
         val api = retrofit.create(GithubApi::class.java)
         val workspaceApi = retrofit.create(GithubWorkspaceApi::class.java)
+        val artifactApi = retrofit.create(GithubArtifactApi::class.java)
         val repository = GithubRepository(api)
         val tokenStore = TokenStore(this)
 
@@ -40,7 +50,12 @@ class MainActivity : ComponentActivity() {
             MaterialTheme(colorScheme = darkColorScheme()) {
                 val vm: MainViewModel = viewModel(
                     factory = SimpleViewModelFactory {
-                        MainViewModel(repository, workspaceApi)
+                        MainViewModel(
+                            repository = repository,
+                            workspaceApi = workspaceApi,
+                            artifactApi = artifactApi,
+                            artifactCacheDirectory = File(cacheDir, "artifacts")
+                        )
                     }
                 )
                 CodexHome(vm, tokenStore)
@@ -340,6 +355,8 @@ private fun ColumnScope.CommitsWorkspace(state: MainUiState) {
 
 @Composable
 private fun ColumnScope.CiWorkspace(state: MainUiState, vm: MainViewModel) {
+    val context = LocalContext.current
+
     when {
         state.selectedJobId != null -> {
             Text("Log joba #" + state.selectedJobId, fontWeight = FontWeight.SemiBold)
@@ -392,6 +409,40 @@ private fun ColumnScope.CiWorkspace(state: MainUiState, vm: MainViewModel) {
                                     artifact.sizeInBytes.toString() + " B" +
                                     (artifact.digest?.let { " · " + it.take(24) } ?: "")
                             )
+                        },
+                        trailingContent = {
+                            when {
+                                state.downloadingArtifactId == artifact.id -> {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier.size(24.dp),
+                                        strokeWidth = 2.dp
+                                    )
+                                }
+
+                                state.downloadedArtifactId == artifact.id &&
+                                    !state.downloadedApkPath.isNullOrBlank() -> {
+                                    Button(
+                                        onClick = {
+                                            launchApkInstaller(
+                                                context,
+                                                requireNotNull(state.downloadedApkPath)
+                                            )
+                                        }
+                                    ) {
+                                        Text("Instaluj")
+                                    }
+                                }
+
+                                !artifact.expired &&
+                                    artifact.digest?.startsWith("sha256:", ignoreCase = true) == true -> {
+                                    OutlinedButton(
+                                        onClick = { vm.downloadArtifact(artifact) },
+                                        enabled = state.downloadingArtifactId == null
+                                    ) {
+                                        Text("Pobierz")
+                                    }
+                                }
+                            }
                         }
                     )
                 }
@@ -468,4 +519,42 @@ private fun ColumnScope.PullRequestWorkspace(
             )
         }
     }
+}
+
+
+private fun launchApkInstaller(context: Context, apkPath: String) {
+    val apk = File(apkPath)
+    if (!apk.isFile || apk.length() <= 0L) {
+        Toast.makeText(context, "Plik APK nie istnieje.", Toast.LENGTH_SHORT).show()
+        return
+    }
+
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+        !context.packageManager.canRequestPackageInstalls()
+    ) {
+        val settingsIntent = Intent(
+            Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+            Uri.parse("package:" + context.packageName)
+        )
+        context.startActivity(settingsIntent)
+        Toast.makeText(
+            context,
+            "Włącz instalowanie z tego źródła i ponownie wybierz Instaluj.",
+            Toast.LENGTH_LONG
+        ).show()
+        return
+    }
+
+    val uri = FileProvider.getUriForFile(
+        context,
+        context.packageName + ".files",
+        apk
+    )
+
+    val installIntent = Intent(Intent.ACTION_VIEW).apply {
+        setDataAndType(uri, "application/vnd.android.package-archive")
+        addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    }
+
+    context.startActivity(installIntent)
 }
