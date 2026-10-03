@@ -7,6 +7,7 @@ import httpx
 from fastapi import FastAPI
 from openai import OpenAI
 
+from .agent_changes import OpenAIChangeSetCollector
 from .agent_service import AgentService, InMemoryIdempotencyStore
 from .github_workspace_preparer import GithubArchiveWorkspacePreparer
 from .main import create_app
@@ -45,6 +46,7 @@ def build_runtime_app(
         runtime=runtime,
         idempotency_store=InMemoryIdempotencyStore(),
         workspace_preparer=workspace_preparer,
+        change_collector=OpenAIChangeSetCollector(openai_client),
     )
     return create_app(
         service=service,
