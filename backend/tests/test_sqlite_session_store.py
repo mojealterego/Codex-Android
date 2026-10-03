@@ -53,3 +53,17 @@ def test_rejects_blank_key_and_session_id(tmp_path):
             raise AssertionError("Expected ValueError")
         except ValueError:
             pass
+
+
+def test_claim_is_atomic_across_store_instances(tmp_path):
+    database = tmp_path / "sessions.sqlite3"
+    first = SqliteSessionStore(database)
+    second = SqliteSessionStore(database)
+
+    assert first.try_claim("same-key") is True
+    assert second.try_claim("same-key") is False
+
+    first.release_claim("same-key")
+
+    assert second.try_claim("same-key") is True
+    second.release_claim("same-key")
