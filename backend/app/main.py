@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field
 
 from .agent_changes import AgentChangeSet
 from .agent_recovery import AgentRecoverySnapshot
-from .agent_service import AgentService, AgentTask
+from .agent_service import AgentService, AgentTask, IdempotencyInProgressError
 
 
 class AgentEventSource(Protocol):
@@ -124,6 +124,11 @@ def create_app(
                 ),
                 idempotency_key=idempotency_key,
             )
+        except IdempotencyInProgressError as error:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=str(error),
+            ) from error
         except ValueError as error:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
