@@ -159,6 +159,7 @@ class AgentBffClient(
 
     suspend fun streamEvents(
         sessionId: String,
+        onConnected: () -> Unit = {},
         onEvent: (AgentStreamEvent) -> Unit
     ) = withContext(Dispatchers.IO) {
         require(sessionId.isNotBlank()) { "Session id is required" }
@@ -191,6 +192,7 @@ class AgentBffClient(
 
                 val source = response.body?.source()
                     ?: throw IOException("Agent BFF event stream has no body")
+                onConnected()
                 val decoder = AgentSseDecoder()
 
                 while (true) {
