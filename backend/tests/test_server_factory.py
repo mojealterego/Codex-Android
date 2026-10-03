@@ -108,7 +108,6 @@ def test_runtime_app_seeds_repository_then_starts_openai_agent_session():
     assert session_request["environment"]["files"][0]["file_id"] == (
         "file_runtime_repo_123"
     )
-    assert session_request["input"].endswith(
-        "Task:\nImplement the next slice."
-    )
+    assert "Task:\nImplement the next slice." in session_request["input"]
+    assert "/workspace/outputs/changes.json" in session_request["input"]
     assert "ghp-runtime-secret" not in repr(session_request)
