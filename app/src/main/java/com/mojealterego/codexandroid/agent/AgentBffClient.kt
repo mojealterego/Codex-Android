@@ -97,6 +97,36 @@ class AgentBffClient(
         executeAccepted(request, "Agent BFF cancel request")
     }
 
+    suspend fun recover(sessionId: String): AgentRecoveryResponse =
+        withContext(Dispatchers.IO) {
+            require(sessionId.isNotBlank()) { "Session id is required" }
+
+            val request = requestBuilder(
+                endpoint(
+                    "v1/agents/sessions/" +
+                        sessionId.trim() +
+                        "/recovery"
+                )
+            )
+                .header("Accept", "application/json")
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IOException(
+                        "Agent BFF recovery request failed: HTTP " +
+                            response.code + errorSuffix(body)
+                    )
+                }
+                gson.fromJson(body, AgentRecoveryResponse::class.java)
+                    ?: throw IOException(
+                        "Agent BFF returned an empty recovery response"
+                    )
+            }
+        }
+
     suspend fun loadChanges(sessionId: String): AgentChangeSetResponse =
         withContext(Dispatchers.IO) {
             require(sessionId.isNotBlank()) { "Session id is required" }
