@@ -213,7 +213,7 @@ private fun WorkspaceTabs(
 }
 
 @Composable
-private fun FilesWorkspace(state: MainUiState, vm: MainViewModel) {
+private fun ColumnScope.FilesWorkspace(state: MainUiState, vm: MainViewModel) {
     Text("/" + state.path, style = MaterialTheme.typography.bodySmall)
 
     val openedFile = state.openedFile
@@ -316,7 +316,7 @@ private fun FilesWorkspace(state: MainUiState, vm: MainViewModel) {
 }
 
 @Composable
-private fun CommitsWorkspace(state: MainUiState) {
+private fun ColumnScope.CommitsWorkspace(state: MainUiState) {
     Text("Historia: " + state.selectedBranch, fontWeight = FontWeight.SemiBold)
 
     LazyColumn(
@@ -339,7 +339,7 @@ private fun CommitsWorkspace(state: MainUiState) {
 }
 
 @Composable
-private fun CiWorkspace(state: MainUiState, vm: MainViewModel) {
+private fun ColumnScope.CiWorkspace(state: MainUiState, vm: MainViewModel) {
     when {
         state.selectedJobId != null -> {
             Text("Log joba #" + state.selectedJobId, fontWeight = FontWeight.SemiBold)
@@ -422,7 +422,7 @@ private fun CiWorkspace(state: MainUiState, vm: MainViewModel) {
 }
 
 @Composable
-private fun PullRequestWorkspace(
+private fun ColumnScope.PullRequestWorkspace(
     state: MainUiState,
     repo: GithubRepo,
     vm: MainViewModel
