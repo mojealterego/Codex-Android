@@ -19,11 +19,25 @@ class OpenAIAgentsRuntime:
     def create_session(
         self,
         task: AgentTask,
-        workspace_seed: WorkspaceSeed | None = None,
+        workspace_seed: WorkspaceSeed,
     ) -> RemoteAgentSession:
+        workspace_seed.validate()
+
         environment: dict[str, object] = {
             "type": "openai_hosted",
             "network": {"access": "disabled"},
+            "files": [{
+                "type": "file_id",
+                "file_id": workspace_seed.file_id,
+                "path": workspace_seed.archive_path,
+            }],
+            "setup_commands": [{
+                "command": (
+                    f"mkdir -p {workspace_seed.workspace_path} && "
+                    f"tar -xzf {workspace_seed.archive_path} "
+                    f"-C {workspace_seed.workspace_path} --strip-components=1"
+                )
+            }],
         }
 
         request: dict[str, object] = {
@@ -36,24 +50,10 @@ class OpenAIAgentsRuntime:
                 "repository": task.repo_full_name,
                 "base_branch": task.base_branch,
                 "base_sha": task.base_sha,
+                "workspace_sha256": workspace_seed.sha256,
             },
+            "input": self._initial_input(task, workspace_seed),
         }
-
-        if workspace_seed is not None:
-            workspace_seed.validate()
-            environment["files"] = [{
-                "type": "file_id",
-                "file_id": workspace_seed.file_id,
-                "path": workspace_seed.archive_path,
-            }]
-            environment["setup_commands"] = [{
-                "command": (
-                    f"mkdir -p {workspace_seed.workspace_path} && "
-                    f"tar -xzf {workspace_seed.archive_path} "
-                    f"-C {workspace_seed.workspace_path} --strip-components=1"
-                )
-            }]
-            request["input"] = self._initial_input(task, workspace_seed)
 
         session = self._client.beta.agents.sessions.create(**request)
 
