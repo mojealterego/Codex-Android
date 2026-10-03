@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from threading import RLock
-from typing import Protocol
+from typing import Any, Protocol
 
 
 @dataclass(frozen=True)
@@ -67,8 +67,16 @@ class AgentRuntime(Protocol):
         ...
 
 
+class AgentChangeCollector(Protocol):
+    def collect(self, session: AgentSessionView) -> Any:
+        ...
+
+
 class IdempotencyStore(Protocol):
     def get(self, key: str) -> AgentSessionView | None:
+        ...
+
+    def get_by_session_id(self, session_id: str) -> AgentSessionView | None:
         ...
 
     def put_if_absent(self, key: str, value: AgentSessionView) -> AgentSessionView:
@@ -79,10 +87,15 @@ class InMemoryIdempotencyStore:
     def __init__(self) -> None:
         self._lock = RLock()
         self._values: dict[str, AgentSessionView] = {}
+        self._sessions: dict[str, AgentSessionView] = {}
 
     def get(self, key: str) -> AgentSessionView | None:
         with self._lock:
             return self._values.get(key)
+
+    def get_by_session_id(self, session_id: str) -> AgentSessionView | None:
+        with self._lock:
+            return self._sessions.get(session_id)
 
     def put_if_absent(self, key: str, value: AgentSessionView) -> AgentSessionView:
         with self._lock:
@@ -90,6 +103,7 @@ class InMemoryIdempotencyStore:
             if existing is not None:
                 return existing
             self._values[key] = value
+            self._sessions[value.session_id] = value
             return value
 
 
@@ -99,10 +113,12 @@ class AgentService:
         runtime: AgentRuntime,
         idempotency_store: IdempotencyStore,
         workspace_preparer: WorkspacePreparer,
+        change_collector: AgentChangeCollector | None = None,
     ) -> None:
         self._runtime = runtime
         self._idempotency_store = idempotency_store
         self._workspace_preparer = workspace_preparer
+        self._change_collector = change_collector
 
     def start(self, task: AgentTask, idempotency_key: str) -> AgentSessionView:
         key = idempotency_key.strip()
@@ -133,6 +149,19 @@ class AgentService:
         )
 
         return self._idempotency_store.put_if_absent(key, view)
+
+    def collect_changes(self, session_id: str) -> Any:
+        clean_session_id = session_id.strip()
+        if not clean_session_id:
+            raise ValueError("Session id is required")
+        if self._change_collector is None:
+            raise ValueError("Agent change collection is not configured")
+
+        session = self._idempotency_store.get_by_session_id(clean_session_id)
+        if session is None:
+            raise ValueError("Unknown agent session")
+
+        return self._change_collector.collect(session)
 
     @staticmethod
     def _validate_task(task: AgentTask) -> None:
