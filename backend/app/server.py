@@ -17,6 +17,7 @@ from .openai_agent_control import OpenAIAgentControl
 from .openai_agents_runtime import OpenAIAgentsRuntime
 from .openai_event_source import OpenAIAgentEventSource
 from .sqlite_session_store import SqliteSessionStore
+from .runtime_smoke import main as runtime_smoke_main
 
 
 DEFAULT_AGENT_INSTRUCTIONS = """
@@ -83,7 +84,22 @@ def create_session_store(
     return SqliteSessionStore(clean_sqlite_path)
 
 
+
+def run_startup_smoke_if_requested() -> None:
+    flag = os.environ.get("CODEX_RUNTIME_SMOKE_ON_START", "").strip().lower()
+    if flag not in {"1", "true", "yes", "on"}:
+        return
+
+    result = runtime_smoke_main()
+    if result != 0:
+        raise RuntimeError(
+            f"Runtime smoke failed with exit code {result}"
+        )
+
+
 def create_runtime_app() -> FastAPI:
+    run_startup_smoke_if_requested()
+
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
         raise RuntimeError("OPENAI_API_KEY is required")
