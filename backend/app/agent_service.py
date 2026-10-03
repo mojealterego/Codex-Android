@@ -15,6 +15,27 @@ class AgentTask:
 
 
 @dataclass(frozen=True)
+class WorkspaceSeed:
+    file_id: str
+    sha256: str
+    size_bytes: int
+    archive_path: str = "/workspace/input/repository.tar.gz"
+    workspace_path: str = "/workspace/repository"
+
+    def validate(self) -> None:
+        if not self.file_id.strip():
+            raise ValueError("Workspace file id is required")
+        if not self.sha256.strip():
+            raise ValueError("Workspace archive SHA-256 is required")
+        if self.size_bytes <= 0:
+            raise ValueError("Workspace archive size must be positive")
+        if not self.archive_path.startswith("/workspace/"):
+            raise ValueError("Workspace archive path must be inside /workspace")
+        if not self.workspace_path.startswith("/workspace/"):
+            raise ValueError("Workspace path must be inside /workspace")
+
+
+@dataclass(frozen=True)
 class RemoteAgentSession:
     session_id: str
     state: str
@@ -33,7 +54,11 @@ class AgentSessionView:
 
 
 class AgentRuntime(Protocol):
-    def create_session(self, task: AgentTask) -> RemoteAgentSession:
+    def create_session(
+        self,
+        task: AgentTask,
+        workspace_seed: WorkspaceSeed | None = None,
+    ) -> RemoteAgentSession:
         ...
 
 
