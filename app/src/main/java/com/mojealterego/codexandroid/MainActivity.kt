@@ -80,10 +80,14 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
     var backendUrl by remember {
         mutableStateOf(tokenStore.agentBackendUrl().orEmpty())
     }
+    var backendToken by remember {
+        mutableStateOf(tokenStore.agentBackendToken().orEmpty())
+    }
     var branchMenu by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) {
         vm.configureAgentBackend(backendUrl)
+        vm.configureAgentBackendToken(backendToken)
     }
 
     BackHandler(enabled = state.selectedRepo != null) { vm.back() }
@@ -181,11 +185,25 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = backendToken,
+                    onValueChange = {
+                        backendToken = it
+                        vm.configureAgentBackendToken(it)
+                    },
+                    label = { Text("Agent BFF token") },
+                    singleLine = true,
+                    visualTransformation = PasswordVisualTransformation(),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Button(
                     onClick = {
                         tokenStore.saveGithubToken(token)
                         tokenStore.saveAgentBackendUrl(backendUrl)
+                        tokenStore.saveAgentBackendToken(backendToken)
                         vm.configureAgentBackend(backendUrl)
+                        vm.configureAgentBackendToken(backendToken)
                         vm.load(token)
                     },
                     enabled = token.isNotBlank() && !state.loading,
