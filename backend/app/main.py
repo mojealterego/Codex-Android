@@ -7,6 +7,7 @@ from fastapi import FastAPI, Header, HTTPException, status
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, Field
 
+from .agent_changes import AgentChangeSet
 from .agent_service import AgentService, AgentTask
 
 
@@ -33,13 +34,30 @@ class AgentSessionResponse(BaseModel):
     events_path: str
 
 
+class AgentFileChangeResponse(BaseModel):
+    path: str
+    operation: str
+    mode: str
+    content: str | None
+    diff: str
+    rename_from: str | None
+
+
+class AgentChangeSetResponse(BaseModel):
+    session_id: str
+    turn_id: str
+    base_branch: str
+    base_sha: str
+    files: list[AgentFileChangeResponse]
+
+
 def create_app(
     service: AgentService,
     event_source: AgentEventSource,
 ) -> FastAPI:
     app = FastAPI(
         title="Codex-Android BFF",
-        version="0.1.0",
+        version="0.2.0",
     )
 
     @app.get("/healthz")
@@ -102,6 +120,46 @@ def create_app(
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
             },
+        )
+
+    @app.get(
+        "/v1/agents/sessions/{session_id}/changes",
+        response_model=AgentChangeSetResponse,
+    )
+    def collect_changes(session_id: str) -> AgentChangeSetResponse:
+        try:
+            change_set = service.collect_changes(session_id)
+        except ValueError as error:
+            message = str(error)
+            code = (
+                status.HTTP_404_NOT_FOUND
+                if "Unknown agent session" in message
+                else status.HTTP_409_CONFLICT
+            )
+            raise HTTPException(status_code=code, detail=message) from error
+
+        if not isinstance(change_set, AgentChangeSet):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Agent change collector returned an invalid result",
+            )
+
+        return AgentChangeSetResponse(
+            session_id=change_set.session_id,
+            turn_id=change_set.turn_id,
+            base_branch=change_set.base_branch,
+            base_sha=change_set.base_sha,
+            files=[
+                AgentFileChangeResponse(
+                    path=item.path,
+                    operation=item.operation,
+                    mode=item.mode,
+                    content=item.content,
+                    diff=item.diff,
+                    rename_from=item.rename_from,
+                )
+                for item in change_set.files
+            ],
         )
 
     return app
