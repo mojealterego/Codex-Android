@@ -151,3 +151,63 @@ GitHub Actions runs both test suites for `main` and `codex/**`. Backend CI also 
 ## Codex naming
 
 This is an independent Android client. It does not impersonate an official OpenAI Codex application. OpenAI functionality is integrated only through supported API interfaces.
+
+
+## Live Render deployment
+
+The Agent BFF is currently deployed in Render's Frankfurt region:
+
+```text
+https://codex-android-bff.onrender.com
+```
+
+The service is configured with:
+
+- dedicated `CODEX_BFF_TOKEN`;
+- a project-scoped `OPENAI_API_KEY`;
+- HTTPS at the Render edge;
+- auto-deploy disabled so runtime changes do not roll out implicitly;
+- a one-time guarded runtime-smoke feature controlled by `CODEX_RUNTIME_SMOKE_ON_START`.
+
+A real OpenAI Agents smoke run has been executed against a repository snapshot pinned to a concrete commit. The agent produced exactly one sandbox change, `SMOKE_TEST.txt`, the exported Artifact passed the normal change-manifest validator, and the file was not published to GitHub.
+
+The smoke gate is disabled after verification. It must not be left enabled for normal restarts because every enabled startup intentionally creates a new OpenAI agent session.
+
+### Render Postgres
+
+A private Render Postgres instance named `codex-android-bff-state` is provisioned in Frankfurt. The repository contains `render.yaml` with a native Render Blueprint reference:
+
+```yaml
+- key: DATABASE_URL
+  fromDatabase:
+    name: codex-android-bff-state
+    property: connectionString
+```
+
+When the service is created or synchronized through the Blueprint, the BFF uses `DatabaseSessionStore` backed by Postgres. Without `DATABASE_URL`, it deliberately falls back to the local SQLite store.
+
+Do not expose the Postgres instance through a public IP allowlist merely to copy credentials. Prefer the private Render `fromDatabase` reference.
+
+### Runtime smoke
+
+The guarded smoke runner can also be executed directly:
+
+```bash
+cd backend
+
+export CODEX_SMOKE_SHA=<exact-commit-sha>
+export CODEX_SMOKE_MODEL=gpt-5.6-sol
+
+python -m app.runtime_smoke
+```
+
+The smoke test:
+
+1. downloads the repository archive pinned to `CODEX_SMOKE_SHA`;
+2. uploads it to the OpenAI-hosted environment;
+3. creates a managed agent session with network access disabled;
+4. asks the agent to create exactly `SMOKE_TEST.txt`;
+5. waits for the terminal session state;
+6. retrieves and validates `/workspace/outputs/changes.json`;
+7. fails unless exactly one expected UTF-8 text change is present;
+8. never invokes `GitDataPublisher` and therefore cannot publish the smoke change to GitHub.
