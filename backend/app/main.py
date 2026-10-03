@@ -1,10 +1,11 @@
 from __future__ import annotations
 
 import json
+import secrets
 from typing import Iterable, Mapping, Protocol
 
-from fastapi import FastAPI, Header, HTTPException, status
-from fastapi.responses import StreamingResponse
+from fastapi import FastAPI, Header, HTTPException, Request, status
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .agent_changes import AgentChangeSet
@@ -58,11 +59,37 @@ class AgentChangeSetResponse(BaseModel):
 def create_app(
     service: AgentService,
     event_source: AgentEventSource,
+    access_token: str | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Codex-Android BFF",
-        version="0.3.0",
+        version="0.4.0",
     )
+
+    configured_token = access_token.strip() if access_token is not None else None
+    if access_token is not None and not configured_token:
+        raise ValueError("BFF access token must not be blank")
+
+    @app.middleware("http")
+    async def protect_v1(request: Request, call_next):
+        if request.url.path.startswith("/v1/") and configured_token is not None:
+            authorization = request.headers.get("Authorization", "")
+            prefix = "Bearer "
+            provided = (
+                authorization[len(prefix):]
+                if authorization.startswith(prefix)
+                else ""
+            )
+            if not provided or not secrets.compare_digest(
+                provided,
+                configured_token,
+            ):
+                return JSONResponse(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    content={"detail": "Unauthorized"},
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        return await call_next(request)
 
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
