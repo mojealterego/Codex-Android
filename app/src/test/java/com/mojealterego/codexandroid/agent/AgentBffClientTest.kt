@@ -126,4 +126,43 @@ class AgentBffClientTest {
         )
         assertEquals("/v1/agents/sessions/sess_1/events", server.takeRequest().path)
     }
+    @Test fun steersActiveSessionWithIdempotencyKey() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(202)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"status\":\"accepted\"}")
+        )
+
+        client.steer(
+            sessionId = "sess_1",
+            message = "Keep compatibility.",
+            idempotencyKey = "steer-001"
+        )
+
+        val request = server.takeRequest()
+        assertEquals("/v1/agents/sessions/sess_1/messages", request.path)
+        assertEquals("steer-001", request.getHeader("Idempotency-Key"))
+        assertTrue(
+            request.body.readUtf8().contains(
+                "\"message\":\"Keep compatibility.\""
+            )
+        )
+    }
+
+    @Test fun cancelsActiveSessionThroughServerControl() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(202)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"status\":\"accepted\"}")
+        )
+
+        client.cancel("sess_1")
+
+        val request = server.takeRequest()
+        assertEquals("/v1/agents/sessions/sess_1/cancel", request.path)
+        assertEquals("POST", request.method)
+    }
+
 }
