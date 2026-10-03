@@ -5,6 +5,10 @@ from threading import RLock
 from typing import Any, Protocol
 
 
+class IdempotencyInProgressError(ValueError):
+    pass
+
+
 @dataclass(frozen=True)
 class AgentTask:
     repo_full_name: str
@@ -94,6 +98,12 @@ class IdempotencyStore(Protocol):
     def get(self, key: str) -> AgentSessionView | None:
         ...
 
+    def try_claim(self, key: str) -> bool:
+        ...
+
+    def release_claim(self, key: str) -> None:
+        ...
+
     def get_by_session_id(self, session_id: str) -> AgentSessionView | None:
         ...
 
@@ -110,6 +120,7 @@ class InMemoryIdempotencyStore:
         self._lock = RLock()
         self._values: dict[str, AgentSessionView] = {}
         self._sessions: dict[str, AgentSessionView] = {}
+        self._claims: set[str] = set()
 
     def get(self, key: str) -> AgentSessionView | None:
         with self._lock:
@@ -118,6 +129,23 @@ class InMemoryIdempotencyStore:
     def get_by_session_id(self, session_id: str) -> AgentSessionView | None:
         with self._lock:
             return self._sessions.get(session_id)
+
+    def try_claim(self, key: str) -> bool:
+        clean_key = key.strip()
+        if not clean_key:
+            raise ValueError("Idempotency-Key is required")
+        with self._lock:
+            if clean_key in self._values or clean_key in self._claims:
+                return False
+            self._claims.add(clean_key)
+            return True
+
+    def release_claim(self, key: str) -> None:
+        clean_key = key.strip()
+        if not clean_key:
+            return
+        with self._lock:
+            self._claims.discard(clean_key)
 
     def put_if_absent(
         self,
@@ -165,24 +193,35 @@ class AgentService:
         if existing is not None:
             return existing
 
-        workspace_seed = self._workspace_preparer.prepare(task)
-        workspace_seed.validate()
+        if not self._idempotency_store.try_claim(key):
+            existing = self._idempotency_store.get(key)
+            if existing is not None:
+                return existing
+            raise IdempotencyInProgressError(
+                "A request with this Idempotency-Key is already in progress"
+            )
 
-        remote = self._runtime.create_session(task, workspace_seed)
-        if not remote.session_id.strip():
-            raise ValueError("Remote agent session id is empty")
+        try:
+            workspace_seed = self._workspace_preparer.prepare(task)
+            workspace_seed.validate()
 
-        view = AgentSessionView(
-            session_id=remote.session_id,
-            state=remote.state,
-            environment_id=remote.environment_id,
-            repository=task.repo_full_name,
-            base_branch=task.base_branch,
-            base_sha=task.base_sha,
-            events_path=f"/v1/agents/sessions/{remote.session_id}/events",
-        )
+            remote = self._runtime.create_session(task, workspace_seed)
+            if not remote.session_id.strip():
+                raise ValueError("Remote agent session id is empty")
 
-        return self._idempotency_store.put_if_absent(key, view)
+            view = AgentSessionView(
+                session_id=remote.session_id,
+                state=remote.state,
+                environment_id=remote.environment_id,
+                repository=task.repo_full_name,
+                base_branch=task.base_branch,
+                base_sha=task.base_sha,
+                events_path=f"/v1/agents/sessions/{remote.session_id}/events",
+            )
+
+            return self._idempotency_store.put_if_absent(key, view)
+        finally:
+            self._idempotency_store.release_claim(key)
 
     def collect_changes(self, session_id: str) -> Any:
         session = self._require_session(session_id)
