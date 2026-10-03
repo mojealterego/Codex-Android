@@ -53,11 +53,16 @@ class AgentSessionView:
     events_path: str
 
 
+class WorkspacePreparer(Protocol):
+    def prepare(self, task: AgentTask) -> WorkspaceSeed:
+        ...
+
+
 class AgentRuntime(Protocol):
     def create_session(
         self,
         task: AgentTask,
-        workspace_seed: WorkspaceSeed | None = None,
+        workspace_seed: WorkspaceSeed,
     ) -> RemoteAgentSession:
         ...
 
@@ -93,9 +98,11 @@ class AgentService:
         self,
         runtime: AgentRuntime,
         idempotency_store: IdempotencyStore,
+        workspace_preparer: WorkspacePreparer,
     ) -> None:
         self._runtime = runtime
         self._idempotency_store = idempotency_store
+        self._workspace_preparer = workspace_preparer
 
     def start(self, task: AgentTask, idempotency_key: str) -> AgentSessionView:
         key = idempotency_key.strip()
@@ -108,7 +115,10 @@ class AgentService:
         if existing is not None:
             return existing
 
-        remote = self._runtime.create_session(task)
+        workspace_seed = self._workspace_preparer.prepare(task)
+        workspace_seed.validate()
+
+        remote = self._runtime.create_session(task, workspace_seed)
         if not remote.session_id.strip():
             raise ValueError("Remote agent session id is empty")
 
