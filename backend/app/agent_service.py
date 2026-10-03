@@ -72,7 +72,18 @@ class AgentChangeCollector(Protocol):
         ...
 
 
+class AgentRecoverySource(Protocol):
+    def recover(self, session_id: str) -> Any:
+        ...
+
+
 class AgentControl(Protocol):
+    def recover(self, session_id: str) -> Any:
+        session = self._require_session(session_id)
+        if self._recovery_source is None:
+            raise ValueError("Agent recovery is not configured")
+        return self._recovery_source.recover(session.session_id)
+
     def steer(
         self,
         session_id: str,
@@ -128,12 +139,14 @@ class AgentService:
         workspace_preparer: WorkspacePreparer,
         change_collector: AgentChangeCollector | None = None,
         agent_control: AgentControl | None = None,
+        recovery_source: AgentRecoverySource | None = None,
     ) -> None:
         self._runtime = runtime
         self._idempotency_store = idempotency_store
         self._workspace_preparer = workspace_preparer
         self._change_collector = change_collector
         self._agent_control = agent_control
+        self._recovery_source = recovery_source
 
     def start(self, task: AgentTask, idempotency_key: str) -> AgentSessionView:
         key = idempotency_key.strip()
