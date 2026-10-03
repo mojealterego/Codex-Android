@@ -454,14 +454,56 @@ private fun ColumnScope.AgentWorkspace(
             if (state.agentStreaming) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 Text(
-                    "Strumień SSE aktywny",
+                    "Turn agenta aktywny",
                     style = MaterialTheme.typography.bodySmall
                 )
             }
 
+            if (state.agentCancelRequested) {
+                Text(
+                    "Żądanie anulowania wysłane — oczekiwanie na turn.cancelled.",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            OutlinedTextField(
+                value = state.agentSteerMessage,
+                onValueChange = vm::updateAgentSteerMessage,
+                label = { Text("Instrukcja / steer") },
+                minLines = 2,
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Button(
+                    onClick = vm::steerAgent,
+                    enabled = state.agentSteerMessage.isNotBlank() &&
+                        !state.agentControlBusy &&
+                        !state.agentCancelRequested,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Wyślij instrukcję")
+                }
+                OutlinedButton(
+                    onClick = vm::cancelAgent,
+                    enabled = state.agentStreaming &&
+                        !state.agentControlBusy &&
+                        !state.agentCancelRequested,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Anuluj turn")
+                }
+            }
+
             OutlinedButton(
                 onClick = vm::resetAgentSession,
-                enabled = !state.loading && !state.agentStreaming,
+                enabled = !state.loading &&
+                    !state.agentStreaming &&
+                    !state.agentControlBusy,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Nowa sesja")
@@ -496,7 +538,9 @@ private fun ColumnScope.AgentWorkspace(
 
             Button(
                 onClick = vm::loadAgentChanges,
-                enabled = !state.loading && !state.agentStreaming,
+                enabled = !state.loading &&
+                    !state.agentStreaming &&
+                    !state.agentControlBusy,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Pobierz zmiany do przeglądu")
