@@ -11,6 +11,7 @@ from .agent_changes import OpenAIChangeSetCollector
 from .agent_service import AgentService, InMemoryIdempotencyStore
 from .github_workspace_preparer import GithubArchiveWorkspacePreparer
 from .main import create_app
+from .openai_agent_control import OpenAIAgentControl
 from .openai_agents_runtime import OpenAIAgentsRuntime
 from .openai_event_source import OpenAIAgentEventSource
 
@@ -47,6 +48,7 @@ def build_runtime_app(
         idempotency_store=InMemoryIdempotencyStore(),
         workspace_preparer=workspace_preparer,
         change_collector=OpenAIChangeSetCollector(openai_client),
+        agent_control=OpenAIAgentControl(openai_client),
     )
     return create_app(
         service=service,
