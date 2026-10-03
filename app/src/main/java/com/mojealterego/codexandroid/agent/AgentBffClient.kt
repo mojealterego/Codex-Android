@@ -51,6 +51,52 @@ class AgentBffClient(
         }
     }
 
+    suspend fun steer(
+        sessionId: String,
+        message: String,
+        idempotencyKey: String
+    ) = withContext(Dispatchers.IO) {
+        require(sessionId.isNotBlank()) { "Session id is required" }
+        require(message.isNotBlank()) { "Steer message is required" }
+        require(idempotencyKey.isNotBlank()) { "Idempotency key is required" }
+
+        val request = Request.Builder()
+            .url(
+                endpoint(
+                    "v1/agents/sessions/" +
+                        sessionId.trim() +
+                        "/messages"
+                )
+            )
+            .header("Accept", "application/json")
+            .header("Idempotency-Key", idempotencyKey.trim())
+            .post(
+                gson.toJson(mapOf("message" to message.trim()))
+                    .toRequestBody(JSON_MEDIA_TYPE)
+            )
+            .build()
+
+        executeAccepted(request, "Agent BFF steer request")
+    }
+
+    suspend fun cancel(sessionId: String) = withContext(Dispatchers.IO) {
+        require(sessionId.isNotBlank()) { "Session id is required" }
+
+        val request = Request.Builder()
+            .url(
+                endpoint(
+                    "v1/agents/sessions/" +
+                        sessionId.trim() +
+                        "/cancel"
+                )
+            )
+            .header("Accept", "application/json")
+            .post(ByteArray(0).toRequestBody(null))
+            .build()
+
+        executeAccepted(request, "Agent BFF cancel request")
+    }
+
     suspend fun loadChanges(sessionId: String): AgentChangeSetResponse =
         withContext(Dispatchers.IO) {
             require(sessionId.isNotBlank()) { "Session id is required" }
@@ -127,6 +173,18 @@ class AgentBffClient(
             }
         } finally {
             cancellation.dispose()
+        }
+    }
+
+    private fun executeAccepted(request: Request, operation: String) {
+        httpClient.newCall(request).execute().use { response ->
+            val body = response.body?.string().orEmpty()
+            if (response.code != 202) {
+                throw IOException(
+                    operation + " failed: HTTP " +
+                        response.code + errorSuffix(body)
+                )
+            }
         }
     }
 
