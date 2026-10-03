@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.agent_service import AgentTask
+from app.agent_service import AgentTask, WorkspaceSeed
 from app.openai_agents_runtime import OpenAIAgentsRuntime
 
 
@@ -12,7 +12,7 @@ class FakeSessions:
         self.last_kwargs = kwargs
         return SimpleNamespace(
             id="sess_openai_123",
-            status="idle",
+            status="in_progress",
             environment=SimpleNamespace(id="env_openai_123"),
         )
 
@@ -27,7 +27,7 @@ class FakeClient:
         )
 
 
-def test_creates_idle_openai_hosted_session_without_starting_task():
+def test_creates_openai_hosted_session_from_seeded_workspace_without_credentials():
     client = FakeClient()
     runtime = OpenAIAgentsRuntime(
         client=client,
@@ -40,18 +40,26 @@ def test_creates_idle_openai_hosted_session_without_starting_task():
         task="Add agent screen",
         model="gpt-6-astra",
     )
+    seed = WorkspaceSeed(
+        file_id="file_repo_123",
+        sha256="sha256-repo-123",
+        size_bytes=4096,
+    )
 
-    result = runtime.create_session(task)
+    result = runtime.create_session(task, seed)
 
     assert result.session_id == "sess_openai_123"
-    assert result.state == "idle"
+    assert result.state == "in_progress"
     assert result.environment_id == "env_openai_123"
 
     request = client.sessions.last_kwargs
-    assert request["environment"] == {
-        "type": "openai_hosted",
-        "network": {"access": "disabled"},
-    }
+    assert request["environment"]["type"] == "openai_hosted"
+    assert request["environment"]["network"] == {"access": "disabled"}
+    assert request["environment"]["files"] == [{
+        "type": "file_id",
+        "file_id": "file_repo_123",
+        "path": "/workspace/input/repository.tar.gz",
+    }]
     assert request["agent"]["model"] == "gpt-6-astra"
     assert request["agent"]["instructions"] == (
         "Edit code only inside the provided workspace."
@@ -60,10 +68,9 @@ def test_creates_idle_openai_hosted_session_without_starting_task():
         "repository": "mojealterego/Codex-Android",
         "base_branch": "main",
         "base_sha": "abc123",
+        "workspace_sha256": "sha256-repo-123",
     }
-
-    # Do not start the turn before repository files are seeded.
-    assert "input" not in request
+    assert request["input"].endswith("Task:\nAdd agent screen")
 
     # A GitHub credential must never be injected into the agent session.
     serialized = repr(request).lower()
