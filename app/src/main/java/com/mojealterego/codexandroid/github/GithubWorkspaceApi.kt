@@ -12,7 +12,7 @@ import retrofit2.http.Url
 
 interface GithubWorkspaceApi {
     @GET
-    override suspend fun commits(
+    suspend fun commits(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT,
@@ -21,7 +21,7 @@ interface GithubWorkspaceApi {
     ): List<GithubCommitItem>
 
     @POST
-    override suspend fun createPullRequest(
+    suspend fun createPullRequest(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT,
@@ -29,7 +29,7 @@ interface GithubWorkspaceApi {
     ): GithubPullRequestResponse
 
     @GET
-    override suspend fun workflowRuns(
+    suspend fun workflowRuns(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT,
@@ -38,7 +38,7 @@ interface GithubWorkspaceApi {
     ): WorkflowRunsResponse
 
     @GET
-    override suspend fun workflowJobs(
+    suspend fun workflowJobs(
         @Url path: String,
         @Header("Authorization") authorization: String,
         @Header("Accept") accept: String = GITHUB_ACCEPT
@@ -159,7 +159,7 @@ class GithubWorkspaceService(
         require(token.isNotBlank()) { "GitHub token is required" }
     }
 
-    suspend fun commits(repoFullName: String, branch: String): List<GithubCommitItem> {
+    override suspend fun commits(repoFullName: String, branch: String): List<GithubCommitItem> {
         require(branch.isNotBlank()) { "Branch is required" }
         return api.commits(
             path = commitsPath(repoFullName),
@@ -168,7 +168,7 @@ class GithubWorkspaceService(
         )
     }
 
-    suspend fun createPullRequest(
+    override suspend fun createPullRequest(
         repoFullName: String,
         head: String,
         base: String,
@@ -193,7 +193,7 @@ class GithubWorkspaceService(
         )
     }
 
-    suspend fun workflowRuns(
+    override suspend fun workflowRuns(
         repoFullName: String,
         branch: String
     ): List<GithubWorkflowRun> {
@@ -205,7 +205,7 @@ class GithubWorkspaceService(
         ).runs
     }
 
-    suspend fun workflowJobs(
+    override suspend fun workflowJobs(
         repoFullName: String,
         runId: Long
     ): List<GithubWorkflowJob> =
