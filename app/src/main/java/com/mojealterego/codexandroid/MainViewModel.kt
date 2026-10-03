@@ -4,10 +4,13 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.mojealterego.codexandroid.data.*
 import com.mojealterego.codexandroid.github.*
+import java.io.File
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 data class MainUiState(
     val repositories: List<GithubRepo> = emptyList(),
@@ -35,14 +38,19 @@ data class MainUiState(
     val jobLog: String = "",
     val prTitle: String = "",
     val prBody: String = "",
-    val createdPullRequest: GithubPullRequestResponse? = null
+    val createdPullRequest: GithubPullRequestResponse? = null,
+    val downloadingArtifactId: Long? = null,
+    val downloadedArtifactId: Long? = null,
+    val downloadedApkPath: String? = null
 ) {
     val visibleRepositories get() = filterRepositories(repositories, query)
 }
 
 class MainViewModel(
     private val repository: GithubRepository,
-    private val workspaceApi: GithubWorkspaceApi
+    private val workspaceApi: GithubWorkspaceApi,
+    private val artifactApi: GithubArtifactApi,
+    private val artifactCacheDirectory: File
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(MainUiState())
     val state: StateFlow<MainUiState> = mutableState.asStateFlow()
@@ -72,7 +80,10 @@ class MainViewModel(
             selectedRunId = null,
             selectedJobId = null,
             jobLog = "",
-            createdPullRequest = null
+            createdPullRequest = null,
+            downloadingArtifactId = null,
+            downloadedArtifactId = null,
+            downloadedApkPath = null
         )
         runCatching {
             val branches = repository.branches(token, repo)
@@ -103,7 +114,10 @@ class MainViewModel(
             selectedRunId = null,
             selectedJobId = null,
             jobLog = "",
-            createdPullRequest = null
+            createdPullRequest = null,
+            downloadingArtifactId = null,
+            downloadedArtifactId = null,
+            downloadedApkPath = null
         )
         openPath(repo, branch, "")
     }
@@ -231,6 +245,71 @@ class MainViewModel(
                     error = it.message ?: "Cannot load workflow log"
                 )
             }
+    }
+
+    fun downloadArtifact(artifact: GithubArtifact) = viewModelScope.launch {
+        val s = mutableState.value
+        val repo = s.selectedRepo ?: return@launch
+
+        if (s.downloadingArtifactId != null) return@launch
+        if (artifact.expired) {
+            mutableState.value = s.copy(error = "Artifact wygasł i nie może zostać pobrany.")
+            return@launch
+        }
+
+        val digest = artifact.digest
+        if (digest.isNullOrBlank()) {
+            mutableState.value = s.copy(error = "Artifact nie ma digestu SHA-256.")
+            return@launch
+        }
+
+        mutableState.value = s.copy(
+            downloadingArtifactId = artifact.id,
+            downloadedArtifactId = null,
+            downloadedApkPath = null,
+            error = null
+        )
+
+        runCatching {
+            withContext(Dispatchers.IO) {
+                val artifactDirectory = File(artifactCacheDirectory, artifact.id.toString())
+                if (artifactDirectory.exists()) {
+                    artifactDirectory.deleteRecursively()
+                }
+                require(artifactDirectory.mkdirs() || artifactDirectory.isDirectory) {
+                    "Nie można utworzyć katalogu artefaktu."
+                }
+
+                val archive = File(artifactDirectory, "artifact.zip")
+                val apkDirectory = File(artifactDirectory, "apk")
+
+                GithubArtifactDownloadService(artifactApi, token).download(
+                    repoFullName = repo.fullName,
+                    artifactId = artifact.id,
+                    destination = archive
+                )
+
+                ArtifactArchive.verifyAndExtractApk(
+                    archive = archive,
+                    expectedDigest = digest,
+                    outputDirectory = apkDirectory
+                )
+            }
+        }.onSuccess { apk ->
+            mutableState.value = mutableState.value.copy(
+                downloadingArtifactId = null,
+                downloadedArtifactId = artifact.id,
+                downloadedApkPath = apk.absolutePath,
+                error = null
+            )
+        }.onFailure {
+            mutableState.value = mutableState.value.copy(
+                downloadingArtifactId = null,
+                downloadedArtifactId = null,
+                downloadedApkPath = null,
+                error = it.message ?: "Nie można pobrać artefaktu APK."
+            )
+        }
     }
 
     fun openItem(item: RepoContent) {
