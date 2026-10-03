@@ -78,7 +78,8 @@ class MainViewModel(
     private val artifactApi: GithubArtifactApi,
     private val gitDataApi: GithubGitDataApi,
     private val artifactCacheDirectory: File,
-    private val agentHttpClient: OkHttpClient
+    private val agentHttpClient: OkHttpClient,
+    private val agentSessionPersistence: AgentSessionPersistence
 ) : ViewModel() {
     private val mutableState = MutableStateFlow(MainUiState())
     val state: StateFlow<MainUiState> = mutableState.asStateFlow()
@@ -137,7 +138,7 @@ class MainViewModel(
             downloadedArtifactId = null,
             downloadedApkPath = null,
             agentTask = "",
-            agentSession = null,
+            agentSession = persisted?.toAgentSessionResponse(),
             agentEvents = emptyList(),
             agentStreaming = false,
             agentChanges = null,
@@ -150,13 +151,28 @@ class MainViewModel(
 
         runCatching {
             val branches = repository.branches(token, repo)
-            val contents = repository.contents(token, repo, repo.defaultBranch, "")
-            branches to contents
-        }.onSuccess { (branches, contents) ->
+            val persisted = agentSessionPersistence.load()?.takeIf { session ->
+                session.repository == repo.fullName &&
+                    branches.any { it.name == session.baseBranch }
+            }
+            val targetBranch = persisted?.baseBranch ?: repo.defaultBranch
+            val contents = repository.contents(token, repo, targetBranch, "")
+            Triple(branches, contents, persisted)
+        }.onSuccess { (branches, contents, persisted) ->
             mutableState.value = mutableState.value.copy(
                 branches = branches,
+                selectedBranch = persisted?.baseBranch ?: repo.defaultBranch,
                 contents = contents,
                 path = "",
+                workspaceSection = if (persisted != null) {
+                    WorkspaceSection.AGENT
+                } else {
+                    WorkspaceSection.FILES
+                },
+                agentSession = persisted?.toAgentSessionResponse(),
+                agentStreaming = false,
+                agentStreamDisconnected = persisted != null,
+                agentRecovery = null,
                 loading = false
             )
         }.onFailure {
@@ -171,11 +187,19 @@ class MainViewModel(
         val repo = mutableState.value.selectedRepo ?: return
         if (branch == mutableState.value.selectedBranch) return
 
+        val persisted = agentSessionPersistence.load()?.takeIf {
+            it.matches(repo.fullName, branch)
+        }
+
         cancelAgentStream()
         pendingAgentIdempotencyKey = null
         mutableState.value = mutableState.value.copy(
             selectedBranch = branch,
-            workspaceSection = WorkspaceSection.FILES,
+            workspaceSection = if (persisted != null) {
+                WorkspaceSection.AGENT
+            } else {
+                WorkspaceSection.FILES
+            },
             openedFile = null,
             editing = false,
             draftText = "",
@@ -200,7 +224,7 @@ class MainViewModel(
             agentChangeSetDraft = null,
             agentPublishResult = null,
             agentRecovery = null,
-            agentStreamDisconnected = false
+            agentStreamDisconnected = persisted != null
         )
         openPath(repo, branch, "")
     }
@@ -547,6 +571,9 @@ class MainViewModel(
 
             clientResult.onSuccess { (client, session) ->
                 pendingAgentIdempotencyKey = null
+                agentSessionPersistence.save(
+                    session.toPersistedAgentSession()
+                )
                 mutableState.value = mutableState.value.copy(
                     loading = false,
                     error = null,
@@ -654,6 +681,7 @@ class MainViewModel(
 
     fun resetAgentSession() {
         cancelAgentStream()
+        agentSessionPersistence.clear()
         pendingAgentIdempotencyKey = null
         pendingAgentSteerKey = null
         mutableState.value = mutableState.value.copy(
