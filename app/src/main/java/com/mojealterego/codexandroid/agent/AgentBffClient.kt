@@ -17,9 +17,12 @@ import okhttp3.RequestBody.Companion.toRequestBody
 class AgentBffClient(
     baseUrl: String,
     private val httpClient: OkHttpClient,
+    accessToken: String? = null,
     private val gson: Gson = Gson()
 ) {
     private val baseUrl: HttpUrl = normalizeBaseUrl(baseUrl)
+    private val accessToken: String? =
+        accessToken?.trim()?.takeIf { it.isNotEmpty() }
 
     suspend fun startSession(
         requestBody: StartAgentSessionRequest,
@@ -27,8 +30,7 @@ class AgentBffClient(
     ): AgentSessionResponse = withContext(Dispatchers.IO) {
         require(idempotencyKey.isNotBlank()) { "Idempotency key is required" }
 
-        val request = Request.Builder()
-            .url(endpoint("v1/agents/sessions"))
+        val request = requestBuilder(endpoint("v1/agents/sessions"))
             .header("Accept", "application/json")
             .header("Idempotency-Key", idempotencyKey.trim())
             .post(
@@ -60,14 +62,13 @@ class AgentBffClient(
         require(message.isNotBlank()) { "Steer message is required" }
         require(idempotencyKey.isNotBlank()) { "Idempotency key is required" }
 
-        val request = Request.Builder()
-            .url(
-                endpoint(
-                    "v1/agents/sessions/" +
-                        sessionId.trim() +
-                        "/messages"
-                )
+        val request = requestBuilder(
+            endpoint(
+                "v1/agents/sessions/" +
+                    sessionId.trim() +
+                    "/messages"
             )
+        )
             .header("Accept", "application/json")
             .header("Idempotency-Key", idempotencyKey.trim())
             .post(
@@ -82,14 +83,13 @@ class AgentBffClient(
     suspend fun cancel(sessionId: String) = withContext(Dispatchers.IO) {
         require(sessionId.isNotBlank()) { "Session id is required" }
 
-        val request = Request.Builder()
-            .url(
-                endpoint(
-                    "v1/agents/sessions/" +
-                        sessionId.trim() +
-                        "/cancel"
-                )
+        val request = requestBuilder(
+            endpoint(
+                "v1/agents/sessions/" +
+                    sessionId.trim() +
+                    "/cancel"
             )
+        )
             .header("Accept", "application/json")
             .post(ByteArray(0).toRequestBody(null))
             .build()
@@ -101,14 +101,13 @@ class AgentBffClient(
         withContext(Dispatchers.IO) {
             require(sessionId.isNotBlank()) { "Session id is required" }
 
-            val request = Request.Builder()
-                .url(
-                    endpoint(
-                        "v1/agents/sessions/" +
-                            sessionId.trim() +
-                            "/changes"
-                    )
+            val request = requestBuilder(
+                endpoint(
+                    "v1/agents/sessions/" +
+                        sessionId.trim() +
+                        "/changes"
                 )
+            )
                 .header("Accept", "application/json")
                 .get()
                 .build()
@@ -134,14 +133,13 @@ class AgentBffClient(
     ) = withContext(Dispatchers.IO) {
         require(sessionId.isNotBlank()) { "Session id is required" }
 
-        val request = Request.Builder()
-            .url(
-                endpoint(
-                    "v1/agents/sessions/" +
-                        sessionId.trim() +
-                        "/events"
-                )
+        val request = requestBuilder(
+            endpoint(
+                "v1/agents/sessions/" +
+                    sessionId.trim() +
+                    "/events"
             )
+        )
             .header("Accept", "text/event-stream")
             .get()
             .build()
@@ -187,6 +185,13 @@ class AgentBffClient(
             }
         }
     }
+
+    private fun requestBuilder(url: HttpUrl): Request.Builder =
+        Request.Builder().url(url).apply {
+            accessToken?.let {
+                header("Authorization", "Bearer $it")
+            }
+        }
 
     private fun endpoint(relativePath: String): HttpUrl =
         baseUrl.resolve(relativePath)
