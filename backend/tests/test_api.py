@@ -3,20 +3,39 @@ from app.agent_service import (
     AgentTask,
     InMemoryIdempotencyStore,
     RemoteAgentSession,
+    WorkspaceSeed,
 )
 from app.main import create_app
 from fastapi.testclient import TestClient
+
+
+class FakeWorkspacePreparer:
+    def __init__(self) -> None:
+        self.calls = 0
+
+    def prepare(self, task: AgentTask) -> WorkspaceSeed:
+        self.calls += 1
+        return WorkspaceSeed(
+            file_id="file_http_workspace_123",
+            sha256="feedface",
+            size_bytes=2048,
+        )
 
 
 class FakeRuntime:
     def __init__(self) -> None:
         self.calls = 0
 
-    def create_session(self, task: AgentTask) -> RemoteAgentSession:
+    def create_session(
+        self,
+        task: AgentTask,
+        workspace_seed: WorkspaceSeed,
+    ) -> RemoteAgentSession:
         self.calls += 1
+        assert workspace_seed.file_id == "file_http_workspace_123"
         return RemoteAgentSession(
             session_id="sess_http_123",
-            state="idle",
+            state="in_progress",
             environment_id="env_http_123",
         )
 
@@ -36,13 +55,18 @@ class FakeEventSource:
 
 def build_client():
     runtime = FakeRuntime()
-    service = AgentService(runtime, InMemoryIdempotencyStore())
+    preparer = FakeWorkspacePreparer()
+    service = AgentService(
+        runtime,
+        InMemoryIdempotencyStore(),
+        preparer,
+    )
     app = create_app(service=service, event_source=FakeEventSource())
-    return TestClient(app), runtime
+    return TestClient(app), runtime, preparer
 
 
 def test_healthz():
-    client, _ = build_client()
+    client, _, _ = build_client()
 
     response = client.get("/healthz")
 
@@ -51,7 +75,7 @@ def test_healthz():
 
 
 def test_create_session_requires_idempotency_and_returns_events_path():
-    client, runtime = build_client()
+    client, runtime, preparer = build_client()
     payload = {
         "repository": "mojealterego/Codex-Android",
         "base_branch": "main",
@@ -79,13 +103,14 @@ def test_create_session_requires_idempotency_and_returns_events_path():
         "/v1/agents/sessions/sess_http_123/events"
     )
     assert runtime.calls == 1
+    assert preparer.calls == 1
 
     missing = client.post("/v1/agents/sessions", json=payload)
     assert missing.status_code == 422
 
 
 def test_streams_agent_events_as_sse():
-    client, _ = build_client()
+    client, _, _ = build_client()
 
     response = client.get("/v1/agents/sessions/sess_http_123/events")
 
