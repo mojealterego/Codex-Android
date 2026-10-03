@@ -186,4 +186,35 @@ class AgentBffClientTest {
         )
     }
 
+    @Test fun recoversSessionStateAndSavedItems() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "application/json")
+                .setBody(
+                    """
+                    {
+                      "session_id":"sess_1",
+                      "status":"idle",
+                      "error":null,
+                      "required_actions":[],
+                      "items":[{
+                        "id":"item_1",
+                        "type":"agent_message",
+                        "content":[{"type":"output_text","text":"done"}]
+                      }]
+                    }
+                    """.trimIndent()
+                )
+        )
+
+        val result = client.recover("sess_1")
+
+        assertEquals("idle", result.status)
+        assertEquals(1, result.items.size)
+        assertEquals(
+            "/v1/agents/sessions/sess_1/recovery",
+            server.takeRequest().path
+        )
+    }
+
 }
