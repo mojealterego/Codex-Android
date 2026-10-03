@@ -78,12 +78,6 @@ class AgentRecoverySource(Protocol):
 
 
 class AgentControl(Protocol):
-    def recover(self, session_id: str) -> Any:
-        session = self._require_session(session_id)
-        if self._recovery_source is None:
-            raise ValueError("Agent recovery is not configured")
-        return self._recovery_source.recover(session.session_id)
-
     def steer(
         self,
         session_id: str,
@@ -103,7 +97,11 @@ class IdempotencyStore(Protocol):
     def get_by_session_id(self, session_id: str) -> AgentSessionView | None:
         ...
 
-    def put_if_absent(self, key: str, value: AgentSessionView) -> AgentSessionView:
+    def put_if_absent(
+        self,
+        key: str,
+        value: AgentSessionView,
+    ) -> AgentSessionView:
         ...
 
 
@@ -121,7 +119,11 @@ class InMemoryIdempotencyStore:
         with self._lock:
             return self._sessions.get(session_id)
 
-    def put_if_absent(self, key: str, value: AgentSessionView) -> AgentSessionView:
+    def put_if_absent(
+        self,
+        key: str,
+        value: AgentSessionView,
+    ) -> AgentSessionView:
         with self._lock:
             existing = self._values.get(key)
             if existing is not None:
@@ -148,7 +150,11 @@ class AgentService:
         self._agent_control = agent_control
         self._recovery_source = recovery_source
 
-    def start(self, task: AgentTask, idempotency_key: str) -> AgentSessionView:
+    def start(
+        self,
+        task: AgentTask,
+        idempotency_key: str,
+    ) -> AgentSessionView:
         key = idempotency_key.strip()
         if not key:
             raise ValueError("Idempotency-Key is required")
@@ -179,17 +185,16 @@ class AgentService:
         return self._idempotency_store.put_if_absent(key, view)
 
     def collect_changes(self, session_id: str) -> Any:
-        clean_session_id = session_id.strip()
-        if not clean_session_id:
-            raise ValueError("Session id is required")
+        session = self._require_session(session_id)
         if self._change_collector is None:
             raise ValueError("Agent change collection is not configured")
-
-        session = self._idempotency_store.get_by_session_id(clean_session_id)
-        if session is None:
-            raise ValueError("Unknown agent session")
-
         return self._change_collector.collect(session)
+
+    def recover(self, session_id: str) -> Any:
+        session = self._require_session(session_id)
+        if self._recovery_source is None:
+            raise ValueError("Agent recovery is not configured")
+        return self._recovery_source.recover(session.session_id)
 
     def steer(
         self,
