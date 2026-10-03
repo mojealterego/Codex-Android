@@ -26,5 +26,11 @@ class TokenStore(context: Context) {
     fun saveAgentBackendUrl(value: String) =
         prefs.edit().putString("agent_backend_url", value.trim()).apply()
 
+    fun agentBackendToken(): String? =
+        prefs.getString("agent_backend_token", null)
+
+    fun saveAgentBackendToken(value: String) =
+        prefs.edit().putString("agent_backend_token", value.trim()).apply()
+
     fun clear() = prefs.edit().clear().apply()
 }
