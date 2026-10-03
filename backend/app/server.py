@@ -8,6 +8,7 @@ from fastapi import FastAPI
 from openai import OpenAI
 
 from .agent_changes import OpenAIChangeSetCollector
+from .agent_recovery import OpenAIAgentRecovery
 from .agent_service import AgentService, InMemoryIdempotencyStore
 from .github_workspace_preparer import GithubArchiveWorkspacePreparer
 from .main import create_app
@@ -56,6 +57,7 @@ def build_runtime_app(
         workspace_preparer=workspace_preparer,
         change_collector=OpenAIChangeSetCollector(openai_client),
         agent_control=OpenAIAgentControl(openai_client),
+        recovery_source=OpenAIAgentRecovery(openai_client),
     )
     return create_app(
         service=service,
