@@ -461,7 +461,7 @@ private fun ColumnScope.AgentWorkspace(
 
             OutlinedButton(
                 onClick = vm::resetAgentSession,
-                enabled = !state.loading,
+                enabled = !state.loading && !state.agentStreaming,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Nowa sesja")
