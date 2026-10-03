@@ -1,8 +1,11 @@
 from __future__ import annotations
 
+import base64
+import shlex
 from typing import Any
 
 from .agent_service import AgentTask, RemoteAgentSession, WorkspaceSeed
+from .change_exporter import EXPORTER_SCRIPT
 
 
 class OpenAIAgentsRuntime:
@@ -23,19 +26,38 @@ class OpenAIAgentsRuntime:
     ) -> RemoteAgentSession:
         workspace_seed.validate()
 
+        archive_path = shlex.quote(workspace_seed.archive_path)
+        workspace_path = shlex.quote(workspace_seed.workspace_path)
+
         environment: dict[str, object] = {
             "type": "openai_hosted",
             "network": {"access": "disabled"},
-            "files": [{
-                "type": "file_id",
-                "file_id": workspace_seed.file_id,
-                "path": workspace_seed.archive_path,
-            }],
+            "files": [
+                {
+                    "type": "file_id",
+                    "file_id": workspace_seed.file_id,
+                    "path": workspace_seed.archive_path,
+                },
+                {
+                    "type": "inline",
+                    "data": base64.b64encode(
+                        EXPORTER_SCRIPT.encode("utf-8")
+                    ).decode("ascii"),
+                    "path": "/workspace/change_exporter.py",
+                },
+            ],
             "setup_commands": [{
                 "command": (
-                    f"mkdir -p {workspace_seed.workspace_path} && "
-                    f"tar -xzf {workspace_seed.archive_path} "
-                    f"-C {workspace_seed.workspace_path} --strip-components=1"
+                    "set -eu; "
+                    f"mkdir -p {workspace_path} /workspace/outputs; "
+                    f"tar -xzf {archive_path} "
+                    f"-C {workspace_path} --strip-components=1; "
+                    f"cd {workspace_path}; "
+                    "git init -q; "
+                    "git config user.email codex-android@local.invalid; "
+                    "git config user.name Codex-Android; "
+                    "git add -A; "
+                    "git commit --allow-empty -qm baseline"
                 )
             }],
         }
@@ -68,12 +90,26 @@ class OpenAIAgentsRuntime:
 
     @staticmethod
     def _initial_input(task: AgentTask, workspace_seed: WorkspaceSeed) -> str:
+        exporter_command = (
+            "python /workspace/change_exporter.py "
+            f"{shlex.quote(workspace_seed.workspace_path)} "
+            "/workspace/outputs/changes.json "
+            f"{shlex.quote(task.base_sha)}"
+        )
         return (
             f"Repository: {task.repo_full_name}\n"
             f"Pinned base branch: {task.base_branch}\n"
             f"Pinned base SHA: {task.base_sha}\n"
             f"Workspace: {workspace_seed.workspace_path}\n\n"
-            f"Task:\n{task.task}"
+            f"Task:\n{task.task}\n\n"
+            "Completion contract:\n"
+            "- Make changes only inside the repository workspace.\n"
+            "- Run relevant tests/build verification before finalizing.\n"
+            "- Do not push, publish, commit to GitHub, or request credentials.\n"
+            "- Only UTF-8 text file changes are supported in this phase.\n"
+            "- Immediately before finishing the turn, run exactly this exporter command:\n"
+            f"{exporter_command}\n"
+            "- The turn is not complete until /workspace/outputs/changes.json exists."
         )
 
     @staticmethod
