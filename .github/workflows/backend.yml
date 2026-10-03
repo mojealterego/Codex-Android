@@ -37,3 +37,6 @@ jobs:
       - name: Backend tests
         working-directory: backend
         run: python -m pytest -q
+
+      - name: Build production BFF image
+        run: docker build --file backend/Dockerfile --tag codex-android-bff:ci backend
