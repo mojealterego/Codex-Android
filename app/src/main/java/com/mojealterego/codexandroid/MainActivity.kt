@@ -485,6 +485,50 @@ private fun ColumnScope.AgentWorkspace(
                 )
             }
 
+            if (state.agentStreamDisconnected) {
+                Text(
+                    "Połączenie SSE zostało przerwane. Stan zdalnego turnu jest nieznany do czasu recovery.",
+                    color = MaterialTheme.colorScheme.error,
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Button(
+                    onClick = vm::recoverAgentSession,
+                    enabled = !state.agentControlBusy,
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("Wznów SSE i odtwórz stan")
+                }
+            }
+
+            state.agentRecovery?.let { recovery ->
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            "Recovered: " + recovery.status,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        recovery.error?.let {
+                            Text(it, color = MaterialTheme.colorScheme.error)
+                        }
+                        Text(
+                            "Saved items: " + recovery.items.size +
+                                " · required actions: " + recovery.requiredActions.size,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        recovery.items.takeLast(10).forEach { item ->
+                            Text(
+                                item.toString().take(1200),
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
             OutlinedTextField(
                 value = state.agentSteerMessage,
                 onValueChange = vm::updateAgentSteerMessage,
@@ -501,7 +545,8 @@ private fun ColumnScope.AgentWorkspace(
                     onClick = vm::steerAgent,
                     enabled = state.agentSteerMessage.isNotBlank() &&
                         !state.agentControlBusy &&
-                        !state.agentCancelRequested,
+                        !state.agentCancelRequested &&
+                        !state.agentStreamDisconnected,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Wyślij instrukcję")
@@ -510,7 +555,8 @@ private fun ColumnScope.AgentWorkspace(
                     onClick = vm::cancelAgent,
                     enabled = state.agentStreaming &&
                         !state.agentControlBusy &&
-                        !state.agentCancelRequested,
+                        !state.agentCancelRequested &&
+                        !state.agentStreamDisconnected,
                     modifier = Modifier.weight(1f)
                 ) {
                     Text("Anuluj turn")
@@ -521,7 +567,8 @@ private fun ColumnScope.AgentWorkspace(
                 onClick = vm::resetAgentSession,
                 enabled = !state.loading &&
                     !state.agentStreaming &&
-                    !state.agentControlBusy,
+                    !state.agentControlBusy &&
+                    !state.agentStreamDisconnected,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Nowa sesja")
@@ -558,7 +605,8 @@ private fun ColumnScope.AgentWorkspace(
                 onClick = vm::loadAgentChanges,
                 enabled = !state.loading &&
                     !state.agentStreaming &&
-                    !state.agentControlBusy,
+                    !state.agentControlBusy &&
+                    !state.agentStreamDisconnected,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Pobierz zmiany do przeglądu")
