@@ -34,6 +34,10 @@ class AgentSessionResponse(BaseModel):
     events_path: str
 
 
+class AgentSteerRequest(BaseModel):
+    message: str = Field(min_length=1, max_length=20000)
+
+
 class AgentFileChangeResponse(BaseModel):
     path: str
     operation: str
@@ -57,7 +61,7 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI(
         title="Codex-Android BFF",
-        version="0.2.0",
+        version="0.3.0",
     )
 
     @app.get("/healthz")
@@ -99,6 +103,48 @@ def create_app(
             base_sha=session.base_sha,
             events_path=session.events_path,
         )
+
+    @app.post(
+        "/v1/agents/sessions/{session_id}/messages",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    def steer_session(
+        session_id: str,
+        request: AgentSteerRequest,
+        idempotency_key: str = Header(..., alias="Idempotency-Key"),
+    ) -> dict[str, str]:
+        try:
+            service.steer(
+                session_id,
+                request.message,
+                idempotency_key=idempotency_key,
+            )
+        except ValueError as error:
+            message = str(error)
+            code = (
+                status.HTTP_404_NOT_FOUND
+                if "Unknown agent session" in message
+                else status.HTTP_400_BAD_REQUEST
+            )
+            raise HTTPException(status_code=code, detail=message) from error
+        return {"status": "accepted"}
+
+    @app.post(
+        "/v1/agents/sessions/{session_id}/cancel",
+        status_code=status.HTTP_202_ACCEPTED,
+    )
+    def cancel_session(session_id: str) -> dict[str, str]:
+        try:
+            service.cancel(session_id)
+        except ValueError as error:
+            message = str(error)
+            code = (
+                status.HTTP_404_NOT_FOUND
+                if "Unknown agent session" in message
+                else status.HTTP_400_BAD_REQUEST
+            )
+            raise HTTPException(status_code=code, detail=message) from error
+        return {"status": "accepted"}
 
     @app.get("/v1/agents/sessions/{session_id}/events")
     def stream_events(session_id: str) -> StreamingResponse:
