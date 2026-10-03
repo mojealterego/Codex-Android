@@ -57,7 +57,10 @@ data class MainUiState(
     val agentChanges: AgentChangeSetResponse? = null,
     val agentChangeSetDraft: ChangeSetDraft? = null,
     val agentCommitMessage: String = "Apply reviewed agent changes",
-    val agentPublishResult: PublishResult? = null
+    val agentPublishResult: PublishResult? = null,
+    val agentSteerMessage: String = "",
+    val agentControlBusy: Boolean = false,
+    val agentCancelRequested: Boolean = false
 ) {
     val visibleRepositories get() = filterRepositories(repositories, query)
     val selectedBranchHeadSha: String
@@ -77,6 +80,7 @@ class MainViewModel(
     private var token: String = ""
     private var agentStreamJob: Job? = null
     private var pendingAgentIdempotencyKey: String? = null
+    private var pendingAgentSteerKey: String? = null
 
     fun search(value: String) {
         mutableState.value = mutableState.value.copy(query = value)
@@ -272,6 +276,91 @@ class MainViewModel(
             agentModel = value,
             error = null
         )
+    }
+
+    fun updateAgentSteerMessage(value: String) {
+        pendingAgentSteerKey = null
+        mutableState.value = mutableState.value.copy(
+            agentSteerMessage = value,
+            error = null
+        )
+    }
+
+    fun steerAgent() = viewModelScope.launch {
+        val s = mutableState.value
+        val session = s.agentSession ?: return@launch
+        if (
+            s.agentSteerMessage.isBlank() ||
+            s.agentControlBusy ||
+            s.agentCancelRequested
+        ) return@launch
+
+        val key = pendingAgentSteerKey
+            ?: UUID.randomUUID().toString().also {
+                pendingAgentSteerKey = it
+            }
+
+        mutableState.value = s.copy(
+            agentControlBusy = true,
+            error = null
+        )
+
+        runCatching {
+            AgentBffClient(
+                s.agentBackendUrl,
+                agentHttpClient
+            ).steer(
+                sessionId = session.sessionId,
+                message = s.agentSteerMessage,
+                idempotencyKey = key
+            )
+        }.onSuccess {
+            pendingAgentSteerKey = null
+            mutableState.value = mutableState.value.copy(
+                agentControlBusy = false,
+                agentSteerMessage = "",
+                agentStreaming = true,
+                agentCancelRequested = false,
+                error = null
+            )
+        }.onFailure {
+            mutableState.value = mutableState.value.copy(
+                agentControlBusy = false,
+                error = it.message ?: "Nie można wysłać instrukcji do agenta."
+            )
+        }
+    }
+
+    fun cancelAgent() = viewModelScope.launch {
+        val s = mutableState.value
+        val session = s.agentSession ?: return@launch
+        if (!s.agentStreaming || s.agentControlBusy || s.agentCancelRequested) {
+            return@launch
+        }
+
+        mutableState.value = s.copy(
+            agentControlBusy = true,
+            error = null
+        )
+
+        runCatching {
+            AgentBffClient(
+                s.agentBackendUrl,
+                agentHttpClient
+            ).cancel(session.sessionId)
+        }.onSuccess {
+            mutableState.value = mutableState.value.copy(
+                agentControlBusy = false,
+                agentCancelRequested = true,
+                error = null
+            )
+        }.onFailure {
+            mutableState.value = mutableState.value.copy(
+                agentControlBusy = false,
+                agentCancelRequested = false,
+                error = it.message ?: "Nie można anulować turnu agenta."
+            )
+        }
     }
 
     fun updateAgentCommitMessage(value: String) {
@@ -479,6 +568,7 @@ class MainViewModel(
     fun resetAgentSession() {
         cancelAgentStream()
         pendingAgentIdempotencyKey = null
+        pendingAgentSteerKey = null
         mutableState.value = mutableState.value.copy(
             error = null,
             agentTask = "",
@@ -487,7 +577,10 @@ class MainViewModel(
             agentStreaming = false,
             agentChanges = null,
             agentChangeSetDraft = null,
-            agentPublishResult = null
+            agentPublishResult = null,
+            agentSteerMessage = "",
+            agentControlBusy = false,
+            agentCancelRequested = false
         )
     }
 
@@ -762,14 +855,12 @@ class MainViewModel(
                     }
 
                     val events = (current.agentEvents + event).takeLast(200)
-                    val terminal = event.type in setOf(
-                        "agent.session.idle",
-                        "agent.session.failed",
-                        "agent.session.cancelled"
-                    )
+                    val terminal = isRootTurnTerminal(event)
                     mutableState.value = current.copy(
                         agentEvents = events,
-                        agentStreaming = !terminal
+                        agentStreaming = if (terminal) false else current.agentStreaming,
+                        agentCancelRequested = if (terminal) false else current.agentCancelRequested,
+                        agentControlBusy = if (terminal) false else current.agentControlBusy
                     )
                 }
             } catch (_: CancellationException) {
