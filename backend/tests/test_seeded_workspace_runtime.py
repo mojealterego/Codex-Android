@@ -50,31 +50,28 @@ def test_seeded_workspace_is_mounted_before_initial_agent_task():
 
     assert result.session_id == "sess_seeded_123"
     request = client.sessions.last_kwargs
+    environment = request["environment"]
 
-    assert request["environment"] == {
-        "type": "openai_hosted",
-        "network": {"access": "disabled"},
-        "files": [{
-            "type": "file_id",
-            "file_id": "file_repo_archive_123",
-            "path": "/workspace/input/repository.tar.gz",
-        }],
-        "setup_commands": [{
-            "command": (
-                "mkdir -p /workspace/repository && "
-                "tar -xzf /workspace/input/repository.tar.gz "
-                "-C /workspace/repository --strip-components=1"
-            )
-        }],
+    assert environment["type"] == "openai_hosted"
+    assert environment["network"] == {"access": "disabled"}
+    assert environment["files"][0] == {
+        "type": "file_id",
+        "file_id": "file_repo_archive_123",
+        "path": "/workspace/input/repository.tar.gz",
     }
+    assert environment["files"][1]["path"] == "/workspace/change_exporter.py"
+    assert "git commit --allow-empty -qm baseline" in (
+        environment["setup_commands"][0]["command"]
+    )
 
-    assert request["input"] == (
+    assert request["input"].startswith(
         "Repository: mojealterego/Codex-Android\n"
         "Pinned base branch: main\n"
         "Pinned base SHA: abc123\n"
         "Workspace: /workspace/repository\n\n"
         "Task:\nImplement the next verified slice."
     )
+    assert "/workspace/outputs/changes.json" in request["input"]
 
     serialized = repr(request).lower()
     assert "github_token" not in serialized
