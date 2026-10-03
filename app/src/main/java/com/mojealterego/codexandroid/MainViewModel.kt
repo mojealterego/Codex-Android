@@ -138,7 +138,7 @@ class MainViewModel(
             downloadedArtifactId = null,
             downloadedApkPath = null,
             agentTask = "",
-            agentSession = persisted?.toAgentSessionResponse(),
+            agentSession = null,
             agentEvents = emptyList(),
             agentStreaming = false,
             agentChanges = null,
@@ -148,6 +148,7 @@ class MainViewModel(
             agentStreamDisconnected = false
         )
         pendingAgentIdempotencyKey = null
+        pendingAgentSteerKey = null
 
         runCatching {
             val branches = repository.branches(token, repo)
@@ -217,7 +218,7 @@ class MainViewModel(
             downloadedArtifactId = null,
             downloadedApkPath = null,
             agentTask = "",
-            agentSession = null,
+            agentSession = persisted?.toAgentSessionResponse(),
             agentEvents = emptyList(),
             agentStreaming = false,
             agentChanges = null,
@@ -226,6 +227,7 @@ class MainViewModel(
             agentRecovery = null,
             agentStreamDisconnected = persisted != null
         )
+        pendingAgentSteerKey = null
         openPath(repo, branch, "")
     }
 
