@@ -55,11 +55,15 @@ def test_creates_openai_hosted_session_from_seeded_workspace_without_credentials
     request = client.sessions.last_kwargs
     assert request["environment"]["type"] == "openai_hosted"
     assert request["environment"]["network"] == {"access": "disabled"}
-    assert request["environment"]["files"] == [{
+    assert request["environment"]["files"][0] == {
         "type": "file_id",
         "file_id": "file_repo_123",
         "path": "/workspace/input/repository.tar.gz",
-    }]
+    }
+    assert request["environment"]["files"][1]["type"] == "inline"
+    assert request["environment"]["files"][1]["path"] == (
+        "/workspace/change_exporter.py"
+    )
     assert request["agent"]["model"] == "gpt-6-astra"
     assert request["agent"]["instructions"] == (
         "Edit code only inside the provided workspace."
@@ -70,9 +74,9 @@ def test_creates_openai_hosted_session_from_seeded_workspace_without_credentials
         "base_sha": "abc123",
         "workspace_sha256": "sha256-repo-123",
     }
-    assert request["input"].endswith("Task:\nAdd agent screen")
+    assert "Task:\nAdd agent screen" in request["input"]
+    assert "/workspace/outputs/changes.json" in request["input"]
 
-    # A GitHub credential must never be injected into the agent session.
     serialized = repr(request).lower()
     assert "github_token" not in serialized
     assert "authorization" not in serialized
