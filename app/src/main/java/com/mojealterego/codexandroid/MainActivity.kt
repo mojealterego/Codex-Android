@@ -11,6 +11,9 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.BackHandler
 import androidx.activity.compose.setContent
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -26,8 +29,10 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mojealterego.codexandroid.data.*
 import com.mojealterego.codexandroid.editor.EditDraft
+import com.mojealterego.codexandroid.git.GithubGitDataApi
 import com.mojealterego.codexandroid.github.*
 import java.io.File
+import okhttp3.OkHttpClient
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 
@@ -43,8 +48,10 @@ class MainActivity : ComponentActivity() {
         val api = retrofit.create(GithubApi::class.java)
         val workspaceApi = retrofit.create(GithubWorkspaceApi::class.java)
         val artifactApi = retrofit.create(GithubArtifactApi::class.java)
+        val gitDataApi = retrofit.create(GithubGitDataApi::class.java)
         val repository = GithubRepository(api)
         val tokenStore = TokenStore(this)
+        val agentHttpClient = OkHttpClient.Builder().build()
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
@@ -54,7 +61,9 @@ class MainActivity : ComponentActivity() {
                             repository = repository,
                             workspaceApi = workspaceApi,
                             artifactApi = artifactApi,
-                            artifactCacheDirectory = File(cacheDir, "artifacts")
+                            gitDataApi = gitDataApi,
+                            artifactCacheDirectory = File(cacheDir, "artifacts"),
+                            agentHttpClient = agentHttpClient
                         )
                     }
                 )
@@ -68,7 +77,14 @@ class MainActivity : ComponentActivity() {
 private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
     val state by vm.state.collectAsState()
     var token by remember { mutableStateOf(tokenStore.githubToken().orEmpty()) }
+    var backendUrl by remember {
+        mutableStateOf(tokenStore.agentBackendUrl().orEmpty())
+    }
     var branchMenu by remember { mutableStateOf(false) }
+
+    LaunchedEffect(Unit) {
+        vm.configureAgentBackend(backendUrl)
+    }
 
     BackHandler(enabled = state.selectedRepo != null) { vm.back() }
 
@@ -134,6 +150,7 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                 when (state.workspaceSection) {
                     WorkspaceSection.FILES -> FilesWorkspace(state, vm)
                     WorkspaceSection.COMMITS -> CommitsWorkspace(state)
+                    WorkspaceSection.AGENT -> AgentWorkspace(state, vm)
                     WorkspaceSection.CI -> CiWorkspace(state, vm)
                     WorkspaceSection.PULL_REQUEST -> PullRequestWorkspace(state, repo, vm)
                 }
@@ -153,9 +170,22 @@ private fun CodexHome(vm: MainViewModel, tokenStore: TokenStore) {
                     modifier = Modifier.fillMaxWidth()
                 )
 
+                OutlinedTextField(
+                    value = backendUrl,
+                    onValueChange = {
+                        backendUrl = it
+                        vm.configureAgentBackend(it)
+                    },
+                    label = { Text("Agent BFF URL (HTTPS)") },
+                    singleLine = true,
+                    modifier = Modifier.fillMaxWidth()
+                )
+
                 Button(
                     onClick = {
                         tokenStore.saveGithubToken(token)
+                        tokenStore.saveAgentBackendUrl(backendUrl)
+                        vm.configureAgentBackend(backendUrl)
                         vm.load(token)
                     },
                     enabled = token.isNotBlank() && !state.loading,
@@ -209,12 +239,15 @@ private fun WorkspaceTabs(
     onSelected: (WorkspaceSection) -> Unit
 ) {
     Row(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = Modifier
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState()),
         horizontalArrangement = Arrangement.spacedBy(6.dp)
     ) {
         listOf(
             WorkspaceSection.FILES to "Pliki",
             WorkspaceSection.COMMITS to "Commity",
+            WorkspaceSection.AGENT to "Agent",
             WorkspaceSection.CI to "CI",
             WorkspaceSection.PULL_REQUEST to "PR"
         ).forEach { (section, label) ->
@@ -348,6 +381,206 @@ private fun ColumnScope.CommitsWorkspace(state: MainUiState) {
                     val date = item.commit.author?.date ?: ""
                     Text(item.sha.take(8) + " · " + author + if (date.isBlank()) "" else " · " + date)
                 }
+            )
+        }
+    }
+}
+
+@Composable
+private fun ColumnScope.AgentWorkspace(
+    state: MainUiState,
+    vm: MainViewModel
+) {
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .weight(1f)
+            .verticalScroll(rememberScrollState()),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
+    ) {
+        Text("Agent runtime", fontWeight = FontWeight.SemiBold)
+        Text(
+            "Branch: " + state.selectedBranch +
+                " · HEAD " + (state.selectedBranchHeadSha.take(10).ifBlank { "—" }),
+            style = MaterialTheme.typography.bodySmall
+        )
+        Text(
+            "BFF: " + state.agentBackendUrl.ifBlank { "nie skonfigurowano" },
+            style = MaterialTheme.typography.bodySmall
+        )
+
+        if (!state.selectedBranch.startsWith("codex/")) {
+            Text(
+                "Sesje agenta są dozwolone wyłącznie na branchach codex/*.",
+                color = MaterialTheme.colorScheme.error
+            )
+        }
+
+        if (state.agentSession == null) {
+            OutlinedTextField(
+                value = state.agentTask,
+                onValueChange = vm::updateAgentTask,
+                label = { Text("Zadanie dla agenta") },
+                minLines = 5,
+                modifier = Modifier.fillMaxWidth()
+            )
+            OutlinedTextField(
+                value = state.agentModel,
+                onValueChange = vm::updateAgentModel,
+                label = { Text("Model") },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth()
+            )
+            Button(
+                onClick = vm::startAgent,
+                enabled = canStartAgent(
+                    state.selectedBranch,
+                    state.selectedBranchHeadSha,
+                    state.agentBackendUrl,
+                    state.agentTask
+                ) && !state.loading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Uruchom agenta na przypiętym HEAD")
+            }
+        } else {
+            val session = requireNotNull(state.agentSession)
+            Text(
+                "Session: " + session.sessionId +
+                    " · " + session.state,
+                color = MaterialTheme.colorScheme.primary
+            )
+
+            if (state.agentStreaming) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(
+                    "Strumień SSE aktywny",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            OutlinedButton(
+                onClick = vm::resetAgentSession,
+                enabled = !state.loading,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Nowa sesja")
+            }
+
+            Text("Zdarzenia", fontWeight = FontWeight.Bold)
+            Surface(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .heightIn(min = 120.dp, max = 260.dp),
+                tonalElevation = 2.dp
+            ) {
+                Column(
+                    Modifier
+                        .padding(10.dp)
+                        .verticalScroll(rememberScrollState()),
+                    verticalArrangement = Arrangement.spacedBy(6.dp)
+                ) {
+                    if (state.agentEvents.isEmpty()) {
+                        Text("Brak zdarzeń.")
+                    } else {
+                        state.agentEvents.forEach { event ->
+                            Text(
+                                event.type + "\n" + event.data.take(800),
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
+            Button(
+                onClick = vm::loadAgentChanges,
+                enabled = !state.loading && !state.agentStreaming,
+                modifier = Modifier.fillMaxWidth()
+            ) {
+                Text("Pobierz zmiany do przeglądu")
+            }
+        }
+
+        state.agentChanges?.let { changes ->
+            HorizontalDivider()
+            Text(
+                "Zmiany z turnu " + changes.turnId,
+                fontWeight = FontWeight.Bold
+            )
+            Text(
+                "Nic nie zostanie opublikowane bez użycia przycisku Publikuj.",
+                color = MaterialTheme.colorScheme.tertiary
+            )
+
+            changes.files.forEach { file ->
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(6.dp)
+                    ) {
+                        Text(
+                            file.operation.uppercase() + " · " + file.path,
+                            fontWeight = FontWeight.SemiBold
+                        )
+                        file.renameFrom?.let {
+                            Text(
+                                "z: " + it,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                        Surface(
+                            modifier = Modifier.fillMaxWidth(),
+                            tonalElevation = 1.dp
+                        ) {
+                            Text(
+                                file.diff.ifBlank { "(brak diffu)" },
+                                modifier = Modifier.padding(8.dp),
+                                fontFamily = FontFamily.Monospace,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
+            OutlinedTextField(
+                value = state.agentCommitMessage,
+                onValueChange = vm::updateAgentCommitMessage,
+                label = { Text("Commit message") },
+                modifier = Modifier.fillMaxWidth()
+            )
+
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                OutlinedButton(
+                    onClick = vm::discardAgentChanges,
+                    enabled = !state.loading,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Odrzuć")
+                }
+                Button(
+                    onClick = vm::publishAgentChanges,
+                    enabled = state.agentChangeSetDraft != null &&
+                        state.agentPublishResult == null &&
+                        !state.loading,
+                    modifier = Modifier.weight(1f)
+                ) {
+                    Text("Publikuj")
+                }
+            }
+        }
+
+        state.agentPublishResult?.let { result ->
+            Text(
+                "Opublikowano atomowy commit " +
+                    result.commitSha.take(12) +
+                    " · " + result.filesChanged + " plików",
+                color = MaterialTheme.colorScheme.primary
             )
         }
     }
