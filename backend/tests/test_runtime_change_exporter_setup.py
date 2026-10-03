@@ -58,7 +58,7 @@ def test_runtime_initializes_local_git_baseline_and_injects_exporter():
     setup = request["environment"]["setup_commands"][0]["command"]
     assert "git init -q" in setup
     assert "git add -A" in setup
-    assert "git commit -qm baseline" in setup
+    assert "git commit --allow-empty -qm baseline" in setup
 
     assert (
         "python /workspace/change_exporter.py "
