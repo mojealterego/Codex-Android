@@ -9,6 +9,7 @@ from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from .agent_changes import AgentChangeSet
+from .agent_recovery import AgentRecoverySnapshot
 from .agent_service import AgentService, AgentTask
 
 
@@ -46,6 +47,14 @@ class AgentFileChangeResponse(BaseModel):
     content: str | None
     diff: str
     rename_from: str | None
+
+
+class AgentRecoveryResponse(BaseModel):
+    session_id: str
+    status: str
+    error: str | None
+    required_actions: list[dict[str, object]]
+    items: list[dict[str, object]]
 
 
 class AgentChangeSetResponse(BaseModel):
@@ -193,6 +202,38 @@ def create_app(
                 "Cache-Control": "no-cache",
                 "X-Accel-Buffering": "no",
             },
+        )
+
+    @app.get(
+        "/v1/agents/sessions/{session_id}/recovery",
+        response_model=AgentRecoveryResponse,
+    )
+    def recover_session(session_id: str) -> AgentRecoveryResponse:
+        try:
+            recovery = service.recover(session_id)
+        except ValueError as error:
+            message = str(error)
+            code = (
+                status.HTTP_404_NOT_FOUND
+                if "Unknown agent session" in message
+                else status.HTTP_409_CONFLICT
+            )
+            raise HTTPException(status_code=code, detail=message) from error
+
+        if not isinstance(recovery, AgentRecoverySnapshot):
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Agent recovery source returned an invalid result",
+            )
+
+        return AgentRecoveryResponse(
+            session_id=recovery.session_id,
+            status=recovery.status,
+            error=recovery.error,
+            required_actions=[
+                dict(item) for item in recovery.required_actions
+            ],
+            items=[dict(item) for item in recovery.items],
         )
 
     @app.get(
