@@ -34,6 +34,7 @@ def build_runtime_app(
     github_token: str | None,
     instructions: str = DEFAULT_AGENT_INSTRUCTIONS,
     session_store: Any | None = None,
+    access_token: str | None = None,
 ) -> FastAPI:
     workspace_preparer = GithubArchiveWorkspacePreparer(
         http_client=http_client,
@@ -59,6 +60,7 @@ def build_runtime_app(
     return create_app(
         service=service,
         event_source=event_source,
+        access_token=access_token,
     )
 
 
@@ -68,6 +70,10 @@ def create_runtime_app() -> FastAPI:
         raise RuntimeError("OPENAI_API_KEY is required")
 
     github_token = os.environ.get("GITHUB_TOKEN")
+    bff_token = os.environ.get("CODEX_BFF_TOKEN", "").strip()
+    if not bff_token:
+        raise RuntimeError("CODEX_BFF_TOKEN is required")
+
     instructions = (
         os.environ.get("CODEX_AGENT_INSTRUCTIONS")
         or DEFAULT_AGENT_INSTRUCTIONS
@@ -93,6 +99,7 @@ def create_runtime_app() -> FastAPI:
         github_token=github_token,
         instructions=instructions,
         session_store=SqliteSessionStore(state_database),
+        access_token=bff_token,
     )
 
     @app.on_event("shutdown")
