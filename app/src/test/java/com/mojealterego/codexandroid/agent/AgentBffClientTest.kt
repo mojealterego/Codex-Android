@@ -217,4 +217,28 @@ class AgentBffClientTest {
         )
     }
 
+    @Test fun reportsSseConnectionBeforeDeliveringEvents() = runBlocking {
+        server.enqueue(
+            MockResponse()
+                .setHeader("Content-Type", "text/event-stream")
+                .setBody(
+                    "event: agent.session.turn.completed\n" +
+                        "data: {\"turn\":{\"subagent_id\":null}}\n\n"
+                )
+        )
+        var connected = false
+        var eventSawConnected = false
+
+        client.streamEvents(
+            sessionId = "sess_1",
+            onConnected = { connected = true },
+            onEvent = {
+                eventSawConnected = connected
+            }
+        )
+
+        assertTrue(connected)
+        assertTrue(eventSawConnected)
+    }
+
 }
