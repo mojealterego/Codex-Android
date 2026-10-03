@@ -49,6 +49,7 @@ data class MainUiState(
     val downloadedArtifactId: Long? = null,
     val downloadedApkPath: String? = null,
     val agentBackendUrl: String = "",
+    val agentBackendToken: String = "",
     val agentTask: String = "",
     val agentModel: String = "gpt-6-astra",
     val agentSession: AgentSessionResponse? = null,
@@ -88,6 +89,10 @@ class MainViewModel(
 
     fun configureAgentBackend(value: String) {
         mutableState.value = mutableState.value.copy(agentBackendUrl = value.trim())
+    }
+
+    fun configureAgentBackendToken(value: String) {
+        mutableState.value = mutableState.value.copy(agentBackendToken = value.trim())
     }
 
     fun load(value: String) = viewModelScope.launch {
@@ -308,7 +313,8 @@ class MainViewModel(
         runCatching {
             AgentBffClient(
                 s.agentBackendUrl,
-                agentHttpClient
+                agentHttpClient,
+                accessToken = s.agentBackendToken
             ).steer(
                 sessionId = session.sessionId,
                 message = s.agentSteerMessage,
@@ -346,7 +352,8 @@ class MainViewModel(
         runCatching {
             AgentBffClient(
                 s.agentBackendUrl,
-                agentHttpClient
+                agentHttpClient,
+                accessToken = s.agentBackendToken
             ).cancel(session.sessionId)
         }.onSuccess {
             mutableState.value = mutableState.value.copy(
@@ -437,6 +444,7 @@ class MainViewModel(
                 pendingAgentIdempotencyKey = it
             }
         val backendUrl = s.agentBackendUrl
+        val backendToken = s.agentBackendToken
 
         mutableState.value = s.copy(
             loading = true,
@@ -449,7 +457,11 @@ class MainViewModel(
 
         viewModelScope.launch {
             val clientResult = runCatching {
-                val client = AgentBffClient(backendUrl, agentHttpClient)
+                val client = AgentBffClient(
+                    backendUrl,
+                    agentHttpClient,
+                    accessToken = backendToken
+                )
                 client to client.startSession(
                     StartAgentSessionRequest(
                         repository = repo.fullName,
@@ -493,7 +505,11 @@ class MainViewModel(
         )
 
         runCatching {
-            val client = AgentBffClient(s.agentBackendUrl, agentHttpClient)
+            val client = AgentBffClient(
+                s.agentBackendUrl,
+                agentHttpClient,
+                accessToken = s.agentBackendToken
+            )
             val changes = client.loadChanges(session.sessionId)
             val draft = changes.toChangeSetDraft(
                 targetBranch = s.selectedBranch,
