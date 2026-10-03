@@ -165,4 +165,25 @@ class AgentBffClientTest {
         assertEquals("POST", request.method)
     }
 
+    @Test fun sendsDedicatedBffBearerToken() = runBlocking {
+        val authenticated = AgentBffClient(
+            baseUrl = server.url("/").toString(),
+            httpClient = OkHttpClient(),
+            accessToken = "bff-secret"
+        )
+        server.enqueue(
+            MockResponse()
+                .setResponseCode(202)
+                .setHeader("Content-Type", "application/json")
+                .setBody("{\"status\":\"accepted\"}")
+        )
+
+        authenticated.cancel("sess_auth")
+
+        assertEquals(
+            "Bearer bff-secret",
+            server.takeRequest().getHeader("Authorization")
+        )
+    }
+
 }
