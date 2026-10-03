@@ -72,6 +72,19 @@ class AgentChangeCollector(Protocol):
         ...
 
 
+class AgentControl(Protocol):
+    def steer(
+        self,
+        session_id: str,
+        message: str,
+        idempotency_key: str,
+    ) -> None:
+        ...
+
+    def cancel(self, session_id: str) -> None:
+        ...
+
+
 class IdempotencyStore(Protocol):
     def get(self, key: str) -> AgentSessionView | None:
         ...
@@ -114,11 +127,13 @@ class AgentService:
         idempotency_store: IdempotencyStore,
         workspace_preparer: WorkspacePreparer,
         change_collector: AgentChangeCollector | None = None,
+        agent_control: AgentControl | None = None,
     ) -> None:
         self._runtime = runtime
         self._idempotency_store = idempotency_store
         self._workspace_preparer = workspace_preparer
         self._change_collector = change_collector
+        self._agent_control = agent_control
 
     def start(self, task: AgentTask, idempotency_key: str) -> AgentSessionView:
         key = idempotency_key.strip()
@@ -162,6 +177,36 @@ class AgentService:
             raise ValueError("Unknown agent session")
 
         return self._change_collector.collect(session)
+
+    def steer(
+        self,
+        session_id: str,
+        message: str,
+        idempotency_key: str,
+    ) -> None:
+        session = self._require_session(session_id)
+        if self._agent_control is None:
+            raise ValueError("Agent control is not configured")
+        self._agent_control.steer(
+            session.session_id,
+            message,
+            idempotency_key=idempotency_key,
+        )
+
+    def cancel(self, session_id: str) -> None:
+        session = self._require_session(session_id)
+        if self._agent_control is None:
+            raise ValueError("Agent control is not configured")
+        self._agent_control.cancel(session.session_id)
+
+    def _require_session(self, session_id: str) -> AgentSessionView:
+        clean_session_id = session_id.strip()
+        if not clean_session_id:
+            raise ValueError("Session id is required")
+        session = self._idempotency_store.get_by_session_id(clean_session_id)
+        if session is None:
+            raise ValueError("Unknown agent session")
+        return session
 
     @staticmethod
     def _validate_task(task: AgentTask) -> None:
