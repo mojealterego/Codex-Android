@@ -10,6 +10,7 @@ from openai import OpenAI
 from .agent_changes import OpenAIChangeSetCollector
 from .agent_recovery import OpenAIAgentRecovery
 from .agent_service import AgentService, InMemoryIdempotencyStore
+from .database_session_store import DatabaseSessionStore
 from .github_workspace_preparer import GithubArchiveWorkspacePreparer
 from .main import create_app
 from .openai_agent_control import OpenAIAgentControl
@@ -66,6 +67,22 @@ def build_runtime_app(
     )
 
 
+
+def create_session_store(
+    *,
+    database_url: str | None,
+    sqlite_path: str,
+) -> Any:
+    clean_database_url = (database_url or "").strip()
+    if clean_database_url:
+        return DatabaseSessionStore(clean_database_url)
+
+    clean_sqlite_path = sqlite_path.strip()
+    if not clean_sqlite_path:
+        raise RuntimeError("CODEX_STATE_DB must not be empty")
+    return SqliteSessionStore(clean_sqlite_path)
+
+
 def create_runtime_app() -> FastAPI:
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
@@ -87,8 +104,7 @@ def create_runtime_app() -> FastAPI:
         os.environ.get("CODEX_STATE_DB")
         or "./codex-android-state.sqlite3"
     ).strip()
-    if not state_database:
-        raise RuntimeError("CODEX_STATE_DB must not be empty")
+    database_url = os.environ.get("DATABASE_URL")
 
     openai_client = OpenAI(api_key=api_key)
     http_client = httpx.Client(
@@ -100,7 +116,10 @@ def create_runtime_app() -> FastAPI:
         http_client=http_client,
         github_token=github_token,
         instructions=instructions,
-        session_store=SqliteSessionStore(state_database),
+        session_store=create_session_store(
+            database_url=database_url,
+            sqlite_path=state_database,
+        ),
         access_token=bff_token,
     )
 
