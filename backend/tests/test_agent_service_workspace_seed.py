@@ -54,7 +54,7 @@ def test_service_prepares_workspace_before_runtime_and_only_once_per_idempotency
     )
     task = AgentTask(
         repo_full_name="mojealterego/Codex-Android",
-        base_branch="main",
+        base_branch="codex/workspace-seed-test",
         base_sha="abc123",
         task="Implement seeded runtime.",
         model="gpt-6-astra",
