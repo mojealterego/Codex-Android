@@ -48,10 +48,19 @@ class FakeEvents:
         raise AssertionError("SSE stream is not expected in this test")
 
 
+class FakeItems:
+    def list(self, session_id, *, order, limit):
+        assert session_id == "sess_rehydrated"
+        assert order == "asc"
+        assert limit == 100
+        return []
+
+
 class FakeSessions:
     def __init__(self):
         self.calls = []
         self.events = FakeEvents()
+        self.items = FakeItems()
 
     def create(self, **kwargs):
         self.calls.append(kwargs)
@@ -59,6 +68,22 @@ class FakeSessions:
             id="sess_runtime_123",
             status="in_progress",
             environment=SimpleNamespace(id="env_runtime_123"),
+        )
+
+    def retrieve(self, session_id):
+        assert session_id == "sess_rehydrated"
+        return SimpleNamespace(
+            id=session_id,
+            status="idle",
+            environment=SimpleNamespace(id="env_rehydrated"),
+            metadata={
+                "codex_android_schema": "1",
+                "repository": "mojealterego/Codex-Android",
+                "base_branch": "codex/recovery",
+                "base_sha": "remote123",
+            },
+            error=None,
+            required_actions=[],
         )
 
 
@@ -111,3 +136,23 @@ def test_runtime_app_seeds_repository_then_starts_openai_agent_session():
     assert "Task:\nImplement the next slice." in session_request["input"]
     assert "/workspace/outputs/changes.json" in session_request["input"]
     assert "ghp-runtime-secret" not in repr(session_request)
+
+
+
+def test_runtime_app_recovers_owned_remote_session_without_local_store_entry():
+    openai = FakeOpenAI()
+    app = build_runtime_app(
+        openai_client=openai,
+        http_client=FakeHttpClient(build_archive()),
+        github_token=None,
+        instructions="Recover only owned Codex-Android sessions.",
+    )
+    client = TestClient(app)
+
+    response = client.get(
+        "/v1/agents/sessions/sess_rehydrated/recovery"
+    )
+
+    assert response.status_code == 200
+    assert response.json()["session_id"] == "sess_rehydrated"
+    assert response.json()["status"] == "idle"
