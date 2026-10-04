@@ -52,8 +52,10 @@ data class MainUiState(
     val downloadedApkPath: String? = null,
     val agentBackendUrl: String = "",
     val agentBackendToken: String = "",
+    val agentDiagnostics: AgentRuntimeDiagnostics? = null,
+    val agentDiagnosticsLoading: Boolean = false,
     val agentTask: String = "",
-    val agentModel: String = "gpt-6-astra",
+    val agentModel: String = "gpt-5.6-sol",
     val agentSession: AgentSessionResponse? = null,
     val agentEvents: List<AgentStreamEvent> = emptyList(),
     val agentStreaming: Boolean = false,
@@ -93,11 +95,90 @@ class MainViewModel(
     }
 
     fun configureAgentBackend(value: String) {
-        mutableState.value = mutableState.value.copy(agentBackendUrl = value.trim())
+        val clean = value.trim()
+        val current = mutableState.value
+        mutableState.value = current.copy(
+            agentBackendUrl = clean,
+            agentDiagnostics = if (clean == current.agentBackendUrl) {
+                current.agentDiagnostics
+            } else {
+                null
+            },
+            agentDiagnosticsLoading = if (clean == current.agentBackendUrl) {
+                current.agentDiagnosticsLoading
+            } else {
+                false
+            }
+        )
     }
 
     fun configureAgentBackendToken(value: String) {
-        mutableState.value = mutableState.value.copy(agentBackendToken = value.trim())
+        val clean = value.trim()
+        val current = mutableState.value
+        mutableState.value = current.copy(
+            agentBackendToken = clean,
+            agentDiagnostics = if (clean == current.agentBackendToken) {
+                current.agentDiagnostics
+            } else {
+                null
+            },
+            agentDiagnosticsLoading = if (clean == current.agentBackendToken) {
+                current.agentDiagnosticsLoading
+            } else {
+                false
+            }
+        )
+    }
+
+    fun checkAgentBackend() {
+        val s = mutableState.value
+        if (s.agentDiagnosticsLoading) return
+        if (s.agentBackendUrl.isBlank()) {
+            mutableState.value = s.copy(
+                agentDiagnostics = null,
+                error = "Skonfiguruj URL Agent BFF przed diagnostyką."
+            )
+            return
+        }
+        if (s.agentBackendToken.isBlank()) {
+            mutableState.value = s.copy(
+                agentDiagnostics = null,
+                error = "Skonfiguruj token Agent BFF przed diagnostyką."
+            )
+            return
+        }
+
+        mutableState.value = s.copy(
+            agentDiagnosticsLoading = true,
+            agentDiagnostics = null,
+            error = null
+        )
+
+        viewModelScope.launch {
+            runCatching {
+                AgentBffClient(
+                    s.agentBackendUrl,
+                    agentHttpClient,
+                    accessToken = s.agentBackendToken
+                ).loadDiagnostics()
+            }.onSuccess { diagnostics ->
+                mutableState.value = mutableState.value.copy(
+                    agentDiagnosticsLoading = false,
+                    agentDiagnostics = diagnostics,
+                    error = if (diagnostics.isReadyForAgent()) {
+                        null
+                    } else {
+                        "Agent BFF odpowiada, ale runtime nie jest gotowy do uruchomienia sesji."
+                    }
+                )
+            }.onFailure {
+                mutableState.value = mutableState.value.copy(
+                    agentDiagnosticsLoading = false,
+                    agentDiagnostics = null,
+                    error = it.message ?: "Nie można zweryfikować Agent BFF."
+                )
+            }
+        }
     }
 
     fun load(value: String) = viewModelScope.launch {
@@ -246,8 +327,16 @@ class MainViewModel(
         when (section) {
             WorkspaceSection.COMMITS -> loadCommits()
             WorkspaceSection.CI -> loadRuns()
+            WorkspaceSection.AGENT -> {
+                val current = mutableState.value
+                if (
+                    current.agentDiagnostics == null &&
+                    !current.agentDiagnosticsLoading
+                ) {
+                    checkAgentBackend()
+                }
+            }
             WorkspaceSection.FILES,
-            WorkspaceSection.AGENT,
             WorkspaceSection.PULL_REQUEST -> Unit
         }
     }
@@ -261,7 +350,7 @@ class MainViewModel(
                 val repo = s.selectedRepo ?: return
                 openPath(repo, s.selectedBranch, s.path)
             }
-            WorkspaceSection.AGENT,
+            WorkspaceSection.AGENT -> checkAgentBackend()
             WorkspaceSection.PULL_REQUEST -> Unit
         }
     }
@@ -524,11 +613,12 @@ class MainViewModel(
                 branch = s.selectedBranch,
                 headSha = headSha,
                 backendUrl = s.agentBackendUrl,
-                task = s.agentTask
+                task = s.agentTask,
+                runtimeReady = s.agentDiagnostics?.isReadyForAgent() == true
             )
         ) {
             mutableState.value = s.copy(
-                error = "Agent wymaga brancha codex/*, przypiętego HEAD, URL BFF i zadania."
+                error = "Agent wymaga brancha codex/*, przypiętego HEAD, zadania i pozytywnej diagnostyki BFF."
             )
             return
         }
