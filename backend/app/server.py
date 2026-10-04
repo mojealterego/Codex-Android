@@ -38,6 +38,7 @@ def build_runtime_app(
     instructions: str = DEFAULT_AGENT_INSTRUCTIONS,
     session_store: Any | None = None,
     access_token: str | None = None,
+    runtime_diagnostics: dict[str, object] | None = None,
 ) -> FastAPI:
     workspace_preparer = GithubArchiveWorkspacePreparer(
         http_client=http_client,
@@ -65,6 +66,7 @@ def build_runtime_app(
         service=service,
         event_source=event_source,
         access_token=access_token,
+        runtime_diagnostics=runtime_diagnostics,
     )
 
 
@@ -137,6 +139,21 @@ def create_runtime_app() -> FastAPI:
             sqlite_path=state_database,
         ),
         access_token=bff_token,
+        runtime_diagnostics={
+            "status": "ok",
+            "storage_backend": (
+                "postgres"
+                if (database_url or "").strip()
+                else "sqlite"
+            ),
+            "persistent_storage": bool(
+                (database_url or "").strip()
+            ),
+            "agents_api": "configured",
+            "github_private_access": bool(
+                (github_token or "").strip()
+            ),
+        },
     )
 
     @app.on_event("shutdown")
