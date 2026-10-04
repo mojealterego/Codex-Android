@@ -18,13 +18,15 @@ class WorkspaceNavigationTest {
                 branch = "codex/review",
                 headSha = "abc123",
                 backendUrl = "https://bff.example.com",
-                task = "Update tests"
+                task = "Update tests",
+                runtimeReady = true
             )
         )
-        assertFalse(canStartAgent("main", "abc123", "https://bff.example.com", "Task"))
-        assertFalse(canStartAgent("codex/review", "", "https://bff.example.com", "Task"))
-        assertFalse(canStartAgent("codex/review", "abc123", "", "Task"))
-        assertFalse(canStartAgent("codex/review", "abc123", "https://bff.example.com", "  "))
+        assertFalse(canStartAgent("main", "abc123", "https://bff.example.com", "Task", true))
+        assertFalse(canStartAgent("codex/review", "", "https://bff.example.com", "Task", true))
+        assertFalse(canStartAgent("codex/review", "abc123", "", "Task", true))
+        assertFalse(canStartAgent("codex/review", "abc123", "https://bff.example.com", "  ", true))
+        assertFalse(canStartAgent("codex/review", "abc123", "https://bff.example.com", "Task", false))
     }
 
     @Test fun exposesExpectedWorkspaceSections() {
