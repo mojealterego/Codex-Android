@@ -35,7 +35,7 @@ def test_seeded_workspace_is_mounted_before_initial_agent_task():
     )
     task = AgentTask(
         repo_full_name="mojealterego/Codex-Android",
-        base_branch="main",
+        base_branch="codex/seeded-runtime-test",
         base_sha="abc123",
         task="Implement the next verified slice.",
         model="gpt-6-astra",
