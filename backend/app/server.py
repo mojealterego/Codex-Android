@@ -16,6 +16,7 @@ from .main import create_app
 from .openai_agent_control import OpenAIAgentControl
 from .openai_agents_runtime import OpenAIAgentsRuntime
 from .openai_event_source import OpenAIAgentEventSource
+from .openai_session_resolver import OpenAIAgentSessionResolver
 from .sqlite_session_store import SqliteSessionStore
 from .runtime_smoke import main as runtime_smoke_main
 
@@ -61,6 +62,7 @@ def build_runtime_app(
         change_collector=OpenAIChangeSetCollector(openai_client),
         agent_control=OpenAIAgentControl(openai_client),
         recovery_source=OpenAIAgentRecovery(openai_client),
+        session_resolver=OpenAIAgentSessionResolver(openai_client),
     )
     return create_app(
         service=service,
