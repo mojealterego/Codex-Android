@@ -19,6 +19,7 @@ from .openai_event_source import OpenAIAgentEventSource
 from .openai_session_resolver import OpenAIAgentSessionResolver
 from .sqlite_session_store import SqliteSessionStore
 from .runtime_smoke import main as runtime_smoke_main
+from .rehydration_smoke import main as rehydration_smoke_main
 
 
 DEFAULT_AGENT_INSTRUCTIONS = """
@@ -101,8 +102,24 @@ def run_startup_smoke_if_requested() -> None:
         )
 
 
+def run_startup_rehydration_smoke_if_requested() -> None:
+    session_id = os.environ.get(
+        "CODEX_REHYDRATE_SMOKE_SESSION_ID",
+        "",
+    ).strip()
+    if not session_id:
+        return
+
+    result = rehydration_smoke_main()
+    if result != 0:
+        raise RuntimeError(
+            f"Runtime rehydration smoke failed with exit code {result}"
+        )
+
+
 def create_runtime_app() -> FastAPI:
     run_startup_smoke_if_requested()
+    run_startup_rehydration_smoke_if_requested()
 
     api_key = os.environ.get("OPENAI_API_KEY", "").strip()
     if not api_key:
