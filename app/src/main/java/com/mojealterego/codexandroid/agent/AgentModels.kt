@@ -111,3 +111,8 @@ fun AgentChangeSetResponse.toChangeSetDraft(
         files = drafts
     ).validated()
 }
+
+
+fun AgentRuntimeDiagnostics.isReadyForAgent(): Boolean =
+    status.equals("ok", ignoreCase = true) &&
+        agentsApi.equals("configured", ignoreCase = true)
