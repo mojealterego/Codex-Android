@@ -35,7 +35,7 @@ def test_creates_openai_hosted_session_from_seeded_workspace_without_credentials
     )
     task = AgentTask(
         repo_full_name="mojealterego/Codex-Android",
-        base_branch="main",
+        base_branch="codex/runtime-test",
         base_sha="abc123",
         task="Add agent screen",
         model="gpt-6-astra",
@@ -70,9 +70,10 @@ def test_creates_openai_hosted_session_from_seeded_workspace_without_credentials
     )
     assert request["metadata"] == {
         "repository": "mojealterego/Codex-Android",
-        "base_branch": "main",
+        "base_branch": "codex/runtime-test",
         "base_sha": "abc123",
         "workspace_sha256": "sha256-repo-123",
+        "codex_android_schema": "1",
     }
     assert "Task:\nAdd agent screen" in request["input"]
     assert "/workspace/outputs/changes.json" in request["input"]
