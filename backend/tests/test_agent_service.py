@@ -50,7 +50,7 @@ def test_start_session_is_idempotent_and_preserves_repo_base():
 
     task = AgentTask(
         repo_full_name="mojealterego/Codex-Android",
-        base_branch="main",
+        base_branch="codex/agent-service-test",
         base_sha="abc123",
         task="Add agent runtime",
         model="gpt-6-astra",
@@ -66,7 +66,7 @@ def test_start_session_is_idempotent_and_preserves_repo_base():
     assert first.session_id == "sess_123"
     assert first.events_path == "/v1/agents/sessions/sess_123/events"
     assert first.repository == "mojealterego/Codex-Android"
-    assert first.base_branch == "main"
+    assert first.base_branch == "codex/agent-service-test"
     assert first.base_sha == "abc123"
     assert len(preparer.calls) == 1
     assert preparer.calls[0] == task
@@ -85,7 +85,7 @@ def test_start_rejects_missing_idempotency_key_before_preparing_workspace():
     )
     task = AgentTask(
         repo_full_name="owner/repo",
-        base_branch="main",
+        base_branch="codex/agent-service-test",
         base_sha="abc123",
         task="Do work",
         model="gpt-6-astra",
