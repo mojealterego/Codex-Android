@@ -81,6 +81,11 @@ class AgentRecoverySource(Protocol):
         ...
 
 
+class AgentSessionResolver(Protocol):
+    def resolve(self, session_id: str) -> AgentSessionView | None:
+        ...
+
+
 class AgentControl(Protocol):
     def steer(
         self,
@@ -170,6 +175,7 @@ class AgentService:
         change_collector: AgentChangeCollector | None = None,
         agent_control: AgentControl | None = None,
         recovery_source: AgentRecoverySource | None = None,
+        session_resolver: AgentSessionResolver | None = None,
     ) -> None:
         self._runtime = runtime
         self._idempotency_store = idempotency_store
@@ -177,6 +183,7 @@ class AgentService:
         self._change_collector = change_collector
         self._agent_control = agent_control
         self._recovery_source = recovery_source
+        self._session_resolver = session_resolver
 
     def start(
         self,
@@ -223,6 +230,9 @@ class AgentService:
         finally:
             self._idempotency_store.release_claim(key)
 
+    def resolve_session(self, session_id: str) -> AgentSessionView:
+        return self._require_session(session_id)
+
     def collect_changes(self, session_id: str) -> Any:
         session = self._require_session(session_id)
         if self._change_collector is None:
@@ -261,16 +271,28 @@ class AgentService:
         if not clean_session_id:
             raise ValueError("Session id is required")
         session = self._idempotency_store.get_by_session_id(clean_session_id)
-        if session is None:
-            raise ValueError("Unknown agent session")
-        return session
+        if session is not None:
+            return session
+
+        if self._session_resolver is not None:
+            session = self._session_resolver.resolve(clean_session_id)
+            if session is not None:
+                return session
+
+        raise ValueError("Unknown agent session")
 
     @staticmethod
     def _validate_task(task: AgentTask) -> None:
         if "/" not in task.repo_full_name.strip("/"):
             raise ValueError("Repository must use owner/name form")
-        if not task.base_branch.strip():
+        branch = task.base_branch.strip()
+        if not branch:
             raise ValueError("Base branch is required")
+        if (
+            not branch.startswith("codex/")
+            or not branch.removeprefix("codex/").strip()
+        ):
+            raise ValueError("Agent sessions may only target codex/* branches")
         if not task.base_sha.strip():
             raise ValueError("Base SHA is required")
         if not task.task.strip():
