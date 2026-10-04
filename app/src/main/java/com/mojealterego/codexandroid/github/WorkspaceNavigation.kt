@@ -22,10 +22,12 @@ fun canStartAgent(
     branch: String,
     headSha: String,
     backendUrl: String,
-    task: String
+    task: String,
+    runtimeReady: Boolean
 ): Boolean =
     branch.startsWith("codex/") &&
         branch.removePrefix("codex/").isNotBlank() &&
         headSha.isNotBlank() &&
         backendUrl.isNotBlank() &&
-        task.isNotBlank()
+        task.isNotBlank() &&
+        runtimeReady
