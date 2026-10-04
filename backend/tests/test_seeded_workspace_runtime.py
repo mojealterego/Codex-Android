@@ -66,7 +66,7 @@ def test_seeded_workspace_is_mounted_before_initial_agent_task():
 
     assert request["input"].startswith(
         "Repository: mojealterego/Codex-Android\n"
-        "Pinned base branch: main\n"
+        "Pinned base branch: codex/seeded-runtime-test\n"
         "Pinned base SHA: abc123\n"
         "Workspace: /workspace/repository\n\n"
         "Task:\nImplement the next verified slice."
