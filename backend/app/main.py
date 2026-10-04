@@ -65,10 +65,19 @@ class AgentChangeSetResponse(BaseModel):
     files: list[AgentFileChangeResponse]
 
 
+class RuntimeDiagnosticsResponse(BaseModel):
+    status: str
+    storage_backend: str
+    persistent_storage: bool
+    agents_api: str
+    github_private_access: bool
+
+
 def create_app(
     service: AgentService,
     event_source: AgentEventSource,
     access_token: str | None = None,
+    runtime_diagnostics: Mapping[str, object] | None = None,
 ) -> FastAPI:
     app = FastAPI(
         title="Codex-Android BFF",
@@ -103,6 +112,30 @@ def create_app(
     @app.get("/healthz")
     def healthz() -> dict[str, str]:
         return {"status": "ok"}
+
+
+    configured_diagnostics = dict(runtime_diagnostics or {})
+
+    @app.get(
+        "/v1/system/diagnostics",
+        response_model=RuntimeDiagnosticsResponse,
+    )
+    def system_diagnostics() -> RuntimeDiagnosticsResponse:
+        return RuntimeDiagnosticsResponse(
+            status=str(configured_diagnostics.get("status") or "ok"),
+            storage_backend=str(
+                configured_diagnostics.get("storage_backend") or "unknown"
+            ),
+            persistent_storage=bool(
+                configured_diagnostics.get("persistent_storage", False)
+            ),
+            agents_api=str(
+                configured_diagnostics.get("agents_api") or "unknown"
+            ),
+            github_private_access=bool(
+                configured_diagnostics.get("github_private_access", False)
+            ),
+        )
 
     @app.post(
         "/v1/agents/sessions",
