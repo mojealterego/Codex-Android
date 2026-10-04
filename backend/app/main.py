@@ -222,6 +222,14 @@ def create_app(
 
     @app.get("/v1/agents/sessions/{session_id}/events")
     def stream_events(session_id: str) -> StreamingResponse:
+        try:
+            service.resolve_session(session_id)
+        except ValueError as error:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="Unknown agent session",
+            ) from error
+
         def generate():
             for raw_event in event_source.stream(session_id):
                 event = dict(raw_event)
