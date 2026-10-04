@@ -73,6 +73,7 @@ class OpenAIAgentsRuntime:
                 "base_branch": task.base_branch,
                 "base_sha": task.base_sha,
                 "workspace_sha256": workspace_seed.sha256,
+                "codex_android_schema": "1",
             },
             "input": self._initial_input(task, workspace_seed),
         }
