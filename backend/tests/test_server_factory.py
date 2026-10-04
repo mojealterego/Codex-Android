@@ -90,7 +90,7 @@ def test_runtime_app_seeds_repository_then_starts_openai_agent_session():
         headers={"Idempotency-Key": "runtime-task-1"},
         json={
             "repository": "mojealterego/Codex-Android",
-            "base_branch": "main",
+            "base_branch": "codex/server-factory-test",
             "base_sha": "abc123",
             "task": "Implement the next slice.",
             "model": "gpt-6-astra",
