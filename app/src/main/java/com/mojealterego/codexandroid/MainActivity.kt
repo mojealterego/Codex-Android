@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.mojealterego.codexandroid.agent.EncryptedAgentSessionPersistence
+import com.mojealterego.codexandroid.agent.isReadyForAgent
 import com.mojealterego.codexandroid.data.*
 import com.mojealterego.codexandroid.editor.EditDraft
 import com.mojealterego.codexandroid.git.GithubGitDataApi
@@ -430,6 +431,85 @@ private fun ColumnScope.AgentWorkspace(
             style = MaterialTheme.typography.bodySmall
         )
 
+        OutlinedButton(
+            onClick = vm::checkAgentBackend,
+            enabled = state.agentBackendUrl.isNotBlank() &&
+                state.agentBackendToken.isNotBlank() &&
+                !state.agentDiagnosticsLoading &&
+                !state.loading,
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            Text(
+                if (state.agentDiagnosticsLoading) {
+                    "Sprawdzanie BFF…"
+                } else {
+                    "Sprawdź BFF"
+                }
+            )
+        }
+
+        when {
+            state.agentDiagnosticsLoading -> {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text(
+                    "Weryfikacja HTTPS, Bearer auth i konfiguracji runtime…",
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+
+            state.agentDiagnostics != null -> {
+                val diagnostics = requireNotNull(state.agentDiagnostics)
+                val ready = diagnostics.isReadyForAgent()
+                ElevatedCard(Modifier.fillMaxWidth()) {
+                    Column(
+                        Modifier.padding(12.dp),
+                        verticalArrangement = Arrangement.spacedBy(4.dp)
+                    ) {
+                        Text(
+                            if (ready) "BFF GOTOWY" else "BFF NIEGOTOWY",
+                            fontWeight = FontWeight.Bold,
+                            color = if (ready) {
+                                MaterialTheme.colorScheme.primary
+                            } else {
+                                MaterialTheme.colorScheme.error
+                            }
+                        )
+                        Text(
+                            "Runtime: " + diagnostics.status +
+                                " · Agents API: " + diagnostics.agentsApi,
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            "State store: " + diagnostics.storageBackend +
+                                " · persistent: " +
+                                if (diagnostics.persistentStorage) "TAK" else "NIE",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Text(
+                            "Private GitHub access: " +
+                                if (diagnostics.githubPrivateAccess) "TAK" else "NIE",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        if (!diagnostics.persistentStorage) {
+                            Text(
+                                "Ostrzeżenie: stan sesji BFF może zostać utracony po restarcie usługi.",
+                                color = MaterialTheme.colorScheme.tertiary,
+                                style = MaterialTheme.typography.bodySmall
+                            )
+                        }
+                    }
+                }
+            }
+
+            else -> {
+                Text(
+                    "BFF niezweryfikowany — start nowej sesji jest zablokowany.",
+                    color = MaterialTheme.colorScheme.tertiary,
+                    style = MaterialTheme.typography.bodySmall
+                )
+            }
+        }
+
         if (!state.selectedBranch.startsWith("codex/")) {
             Text(
                 "Sesje agenta są dozwolone wyłącznie na branchach codex/*.",
@@ -458,8 +538,10 @@ private fun ColumnScope.AgentWorkspace(
                     state.selectedBranch,
                     state.selectedBranchHeadSha,
                     state.agentBackendUrl,
-                    state.agentTask
-                ) && !state.loading,
+                    state.agentTask,
+                    state.agentDiagnostics?.isReadyForAgent() == true
+                ) && !state.loading &&
+                    !state.agentDiagnosticsLoading,
                 modifier = Modifier.fillMaxWidth()
             ) {
                 Text("Uruchom agenta na przypiętym HEAD")
