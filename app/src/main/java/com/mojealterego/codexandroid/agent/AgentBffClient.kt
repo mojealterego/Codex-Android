@@ -24,6 +24,30 @@ class AgentBffClient(
     private val accessToken: String? =
         accessToken?.trim()?.takeIf { it.isNotEmpty() }
 
+    suspend fun loadDiagnostics(): AgentRuntimeDiagnostics =
+        withContext(Dispatchers.IO) {
+            val request = requestBuilder(
+                endpoint("v1/system/diagnostics")
+            )
+                .header("Accept", "application/json")
+                .get()
+                .build()
+
+            httpClient.newCall(request).execute().use { response ->
+                val body = response.body?.string().orEmpty()
+                if (!response.isSuccessful) {
+                    throw IOException(
+                        "Agent BFF diagnostics request failed: HTTP " +
+                            response.code + errorSuffix(body)
+                    )
+                }
+                gson.fromJson(body, AgentRuntimeDiagnostics::class.java)
+                    ?: throw IOException(
+                        "Agent BFF returned an empty diagnostics response"
+                    )
+            }
+        }
+
     suspend fun startSession(
         requestBody: StartAgentSessionRequest,
         idempotencyKey: String
