@@ -78,7 +78,7 @@ def test_create_session_requires_idempotency_and_returns_events_path():
     client, runtime, preparer = build_client()
     payload = {
         "repository": "mojealterego/Codex-Android",
-        "base_branch": "main",
+        "base_branch": "codex/http-test",
         "base_sha": "abc123",
         "task": "Add mobile agent UI",
         "model": "gpt-6-astra",
@@ -109,8 +109,20 @@ def test_create_session_requires_idempotency_and_returns_events_path():
     assert missing.status_code == 422
 
 
-def test_streams_agent_events_as_sse():
+def test_streams_agent_events_as_sse_only_for_known_session():
     client, _, _ = build_client()
+    started = client.post(
+        "/v1/agents/sessions",
+        headers={"Idempotency-Key": "task-stream-1"},
+        json={
+            "repository": "mojealterego/Codex-Android",
+            "base_branch": "codex/http-test",
+            "base_sha": "abc123",
+            "task": "Stream this session",
+            "model": "gpt-5.6-sol",
+        },
+    )
+    assert started.status_code == 201
 
     response = client.get("/v1/agents/sessions/sess_http_123/events")
 
@@ -119,3 +131,11 @@ def test_streams_agent_events_as_sse():
     assert "event: agent.session.created" in response.text
     assert '"session_id":"sess_http_123"' in response.text
     assert "event: agent.session.idle" in response.text
+
+
+def test_rejects_event_stream_for_unknown_session():
+    client, _, _ = build_client()
+
+    response = client.get("/v1/agents/sessions/foreign_session/events")
+
+    assert response.status_code == 404
