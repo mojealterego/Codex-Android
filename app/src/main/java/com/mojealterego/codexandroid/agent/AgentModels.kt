@@ -54,6 +54,14 @@ data class AgentStreamEvent(
     val data: String
 )
 
+data class AgentRuntimeDiagnostics(
+    val status: String,
+    @SerializedName("storage_backend") val storageBackend: String,
+    @SerializedName("persistent_storage") val persistentStorage: Boolean,
+    @SerializedName("agents_api") val agentsApi: String,
+    @SerializedName("github_private_access") val githubPrivateAccess: Boolean
+)
+
 fun AgentChangeSetResponse.toChangeSetDraft(
     targetBranch: String,
     currentHeadSha: String,
